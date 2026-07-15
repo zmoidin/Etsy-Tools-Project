@@ -12,10 +12,13 @@ torch
 torchvision
 
 # AutoPNG dependencies
-streamlit
 google-genai
 pyyaml
 python-dotenv
 pydantic-settings
 loguru
 ruff
+fastapi
+uvicorn
+jinja2
+python-multipart

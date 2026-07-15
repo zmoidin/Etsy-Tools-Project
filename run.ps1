@@ -2,11 +2,11 @@
 # Run this in PowerShell to start your local server.
 
 # 1. Set terminal title
-$host.UI.RawUI.WindowTitle = "EtsyTools Dashboard Server"
+$host.UI.RawUI.WindowTitle = "EtsyTools FastAPI Server"
 
 # 2. Print startup banner
 Write-Host "=========================================" -ForegroundColor Green
-Write-Host "   🎨 Launching EtsyTools Dashboard AI   " -ForegroundColor Green
+Write-Host "   🎨 Launching EtsyTools FastAPI UI    " -ForegroundColor Green
 Write-Host "=========================================" -ForegroundColor Green
 Write-Host "Navigating to project directory..." -ForegroundColor Gray
 
@@ -14,9 +14,9 @@ Write-Host "Navigating to project directory..." -ForegroundColor Gray
 Set-Location -Path "c:\QuillSketch\EtsyTools"
 
 # 4. Check if virtual environment exists
-if (Test-Path ".\.venv\Scripts\streamlit.exe") {
-    Write-Host "Starting Streamlit server..." -ForegroundColor Green
-    & ".\.venv\Scripts\streamlit.exe" run app.py
+if (Test-Path ".\.venv\Scripts\python.exe") {
+    Write-Host "Starting Uvicorn server..." -ForegroundColor Green
+    & ".\.venv\Scripts\python.exe" -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 } else {
-    Write-Error "Could not find virtual environment streamlit.exe. Make sure it is installed at c:\QuillSketch\EtsyTools\.venv"
+    Write-Error "Could not find .venv Python. Install dependencies first, then rerun this script."
 }

@@ -387,15 +387,13 @@ def create_showcase_mockup(input_dir, background_path, output_path=None):
             new_h = int(img.height * scale)
             resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
             
-            shadowed = add_drop_shadow(resized)
-            
             cell_x = margin_x + (c * cell_w)
             cell_y = margin_y + (r * cell_h)
             
-            paste_x = cell_x + (cell_w - shadowed.width) // 2
-            paste_y = cell_y + (cell_h - shadowed.height) // 2
+            paste_x = cell_x + (cell_w - resized.width) // 2
+            paste_y = cell_y + (cell_h - resized.height) // 2
             
-            bg.paste(shadowed, (paste_x, paste_y), shadowed)
+            bg.paste(resized, (paste_x, paste_y), resized)
             idx += 1
             
     if not output_path:

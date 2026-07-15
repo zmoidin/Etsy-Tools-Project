@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Image Assist - EtsyTools Studio{% endblock %}
+
+{% block content %}
+  <section class="page-hero">
+    <h1>Image Assist</h1>
+    <p>Prepare clipart sheets, batch format artwork, and build showcase collages.</p>
+  </section>
+
+  <nav class="tool-tabs" aria-label="Image Assist sub-tools">
+    <a href="/image-assist?tool=splitter" class="tab-btn {% if active_tool == 'splitter' %}active{% endif %}">Sheet Splitter</a>
+    <a href="/image-assist?tool=batch" class="tab-btn {% if active_tool == 'batch' %}active{% endif %}">Batch Formatter</a>
+    <a href="/image-assist?tool=collage" class="tab-btn {% if active_tool == 'collage' %}active{% endif %}">Showcase Collage</a>
+  </nav>
+
+  {% if error %}
+    <div class="alert warning">{{ error }}</div>
+  {% endif %}
+
+  <!-- Top Card: Inputs -->
+  <div class="card" style="margin-bottom: 22px;">
+
+    {% if active_tool == 'splitter' %}
+      <form action="/image-assist/splitter" method="post" enctype="multipart/form-data" class="form-stack">
+        <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; width: 100%;">
+          <div style="flex: 2; min-width: 240px;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">Clipart sheet image</span>
+              <input type="file" name="sheet" accept="image/png, image/jpeg, image/jpg" required style="padding: 8px;" />
+            </label>
+          </div>
+
+          <div style="flex: 1; min-width: 150px;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">Canvas color mode</span>
+              <select name="canvas_color" id="canvasColorSelect" style="padding: 9px 12px;">
+                <option value="transparent">Transparent</option>
+                <option value="white">White</option>
+                <option value="black">Black</option>
+                <option value="custom hex">Custom Hex Color</option>
+              </select>
+            </label>
+          </div>
+
+          <div id="customHexLabel" style="flex: 1; min-width: 150px; display: none;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">Custom Hex Color Code</span>
+              <input type="text" name="custom_hex" value="#ffffff" placeholder="#FAF8F5" style="padding: 8px 12px;" />
+            </label>
+          </div>
+
+          <div style="flex-shrink: 0;">
+            <button type="submit" class="primary-btn" data-loading-msg="AI is segmenting sheet and isolating assets..." style="height: 38px; margin: 0; padding: 10px 20px; white-space: nowrap;">Run AI Sheet Splitter</button>
+          </div>
+        </div>
+      </form>
+
+      <script>
+        const selectEl = document.getElementById('canvasColorSelect');
+        const hexEl = document.getElementById('customHexLabel');
+        if (selectEl && hexEl) {
+          selectEl.addEventListener('change', function() {
+            if (this.value === 'custom hex') {
+              hexEl.style.display = 'block';
+            } else {
+              hexEl.style.display = 'none';
+            }
+          });
+          if (selectEl.value === 'custom hex') {
+            hexEl.style.display = 'block';
+          }
+        }
+      </script>
+
+    {% elif active_tool == 'batch' %}
+      <form action="/image-assist/batch" method="post" enctype="multipart/form-data" class="form-stack">
+        <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; width: 100%;">
+          <div style="flex: 1; min-width: 240px;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">Select design files</span>
+              <input type="file" name="files" accept="image/png, image/jpeg, image/jpg, image/webp" multiple required style="padding: 8px;" />
+            </label>
+          </div>
+
+          <div style="flex-shrink: 0;">
+            <button type="submit" class="primary-btn" data-loading-msg="Removing backgrounds and formatting batch files..." style="height: 38px; margin: 0; padding: 10px 20px; white-space: nowrap;">Run Batch Formatter</button>
+          </div>
+        </div>
+      </form>
+
+    {% elif active_tool == 'collage' %}
+      <form action="/image-assist/collage" method="post" enctype="multipart/form-data" class="form-stack">
+        <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; width: 100%;">
+          <div style="flex: 1.5; min-width: 220px;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">Clipart files (isolated PNGs)</span>
+              <input type="file" name="cliparts" accept="image/png" multiple required style="padding: 8px;" />
+            </label>
+          </div>
+
+          <div style="flex: 1; min-width: 200px;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">Background texture (optional)</span>
+              <input type="file" name="background" accept="image/png, image/jpeg, image/jpg" style="padding: 8px;" />
+            </label>
+          </div>
+
+          <div style="flex-shrink: 0;">
+            <button type="submit" class="primary-btn" data-loading-msg="Generating grid collage with drop-shadows..." style="height: 38px; margin: 0; padding: 10px 20px; white-space: nowrap;">Generate Showcase Collage</button>
+          </div>
+        </div>
+      </form>
+    {% endif %}
+  </div>
+
+  <!-- Bottom Card: Outputs & Previews -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h2>Output Previews</h2>
+        <p>Review and download isolated clipart assets.</p>
+      </div>
+    </div>
+
+    {% if zip_url %}
+      <div class="saas-alert" style="margin-bottom: 20px; background: var(--green-soft); border-color: #bbf7d0; padding: 16px; border-radius: 12px;">
+        <h4 style="margin: 0 0 8px; color: var(--green); font-size: 15px; font-weight: bold;">🎉 AI Processing Complete!</h4>
+        <p style="margin: 0 0 14px; font-size: 13px;">Successfully processed files into high-resolution assets.</p>
+        <a href="{{ zip_url }}" class="primary-btn" style="display: inline-block; text-decoration: none; text-align: center;">📥 Download ZIP Pack</a>
+      </div>
+    {% endif %}
+
+    {% if active_tool == 'splitter' %}
+      {% if split_images %}
+        <div class="gallery-grid">
+          {% for img_url in split_images %}
+            <div class="gallery-item checkerboard">
+              <img src="{{ img_url }}" alt="Split clipart asset" />
+              <span>{{ img_url.split('/')[-1] }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state" style="min-height: 250px;">
+          <strong>No assets split yet</strong>
+          <span>Upload a clipart sheet and run the AI splitter to see extracted designs here.</span>
+        </div>
+      {% endif %}
+
+    {% elif active_tool == 'batch' %}
+      {% if formatted_images %}
+        <div class="gallery-grid">
+          {% for img_url in formatted_images %}
+            <div class="gallery-item checkerboard">
+              <img src="{{ img_url }}" alt="Formatted clipart asset" />
+              <span>{{ img_url.split('/')[-1] }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state" style="min-height: 250px;">
+          <strong>No assets formatted yet</strong>
+          <span>Upload files and run batch formatting to remove backgrounds and resize to print standards.</span>
+        </div>
+      {% endif %}
+
+    {% elif active_tool == 'collage' %}
+      {% if collage_url %}
+        <div class="image-frame" style="margin-bottom: 18px; min-height: 250px;">
+          <img src="{{ collage_url }}" alt="Generated bundle showcase collage" style="max-height: 250px; object-fit: contain; margin: 0 auto; display: block;" />
+        </div>
+        <a href="{{ collage_url }}" download="bundle_showcase_mockup.png" class="primary-btn" style="display: block; text-decoration: none; text-align: center;">📥 Download Showcase Image</a>
+      {% else %}
+        <div class="empty-state" style="min-height: 250px;">
+          <strong>No showcase collage generated yet</strong>
+          <span>Upload transparent assets and select background texture to render collage.</span>
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endblock %}

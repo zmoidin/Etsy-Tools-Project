@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Trend Research - EtsyTools Studio{% endblock %}
+
+{% block content %}
+  <section class="page-hero">
+    <h1>Trend Research</h1>
+    <p>Search current design signals, review sources, and generate prompt starters.</p>
+  </section>
+
+  {% if error %}
+    <div class="alert warning">{{ error }}</div>
+  {% endif %}
+
+  <!-- Top Card: Search Form & API Quota -->
+  <div class="card" style="margin-bottom: 22px;">
+    <form action="/trend-research/search" method="post" class="form-stack">
+      <label>
+        <span>Design Topic</span>
+        <div class="form-row">
+          <input type="text" name="topic" value="{{ topic or '' }}" placeholder="e.g. retro cottagecore, Halloween cats, botanical" required />
+          <button type="submit" class="primary-btn" data-loading-msg="Searching web trends and scoring illustration styles..." style="white-space: nowrap;">Analyze Graphic Trends</button>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 12px; flex-wrap: wrap; gap: 12px;">
+          <span class="help-text" style="margin: 0;">We query current graphics design trends for this topic via Tavily.</span>
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 750; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em;">
+            <span>Tavily Usage: {{ searches_used }}/1000</span>
+            <div class="progress" style="width: 80px; height: 4px; margin: 0;">
+              <div class="progress-bar" style="width: {{ searches_percentage }}%;"></div>
+            </div>
+          </div>
+        </div>
+      </label>
+    </form>
+  </div>
+
+  <!-- Bottom Card: Trend Results & Prompts Output -->
+  <div class="card">
+    {% if trends %}
+      <div class="card-header">
+        <div>
+          <h2>Top Design Trends for `{{ topic }}`</h2>
+          <p>Gemini AI analysis of web-search graphic design signals. Click "Generate Prompts" on any trend to create clipart starter keywords.</p>
+        </div>
+      </div>
+
+      <div class="trend-list">
+        {% for trend in trends %}
+          <div class="trend-row" style="gap: 16px;">
+            <div class="trend-info">
+              <span class="trend-name">{{ loop.index }}. {{ trend.design }}</span>
+              <div class="trend-style">Style: {{ trend.style }}</div>
+            </div>
+            
+            <div class="trend-badge-col">
+              {% if trend.trend_direction == 'Surging' or trend.trend_direction == 'Rising' %}
+                <span class="status-badge success">{{ trend.trend_direction }}</span>
+              {% elif trend.trend_direction == 'Declining' %}
+                <span class="status-badge warning">{{ trend.trend_direction }}</span>
+              {% else %}
+                <span class="status-badge" style="background: #f3f4f6; color: #374151;">{{ trend.trend_direction }}</span>
+              {% endif %}
+            </div>
+            
+            <div class="trend-score-col" style="margin-right: 16px;">
+              <div class="trend-score-header">
+                <span>Score:</span>
+                <span>{{ trend.trend_score }}%</span>
+              </div>
+              <div class="progress">
+                <div class="progress-bar" style="width: {{ trend.trend_score }}%;"></div>
+              </div>
+            </div>
+
+            <!-- Inline form for prompt generation for this specific row -->
+            <div>
+              <form action="/trend-research/prompts" method="post" style="margin: 0;">
+                <input type="hidden" name="topic" value="{{ topic }}" />
+                <input type="hidden" name="trends_json" value="{{ trends_json }}" />
+                <input type="hidden" name="selected_trend" value="{{ trend.design }}|{{ trend.style }}" />
+                <button type="submit" class="secondary-btn" data-loading-msg="Drafting Midjourney & DALL-E sticker prompts..." style="padding: 8px 12px; font-size: 12px; white-space: nowrap; {% if selected_trend == trend.design ~ '|' ~ trend.style %}border-color: var(--blue); color: var(--blue); background: var(--blue-soft);{% endif %}">
+                  Generate Prompts
+                </button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <!-- Prompts Output Area -->
+      {% if prompts %}
+        <div style="margin-top: 28px; padding-top: 22px; border-top: 1.5px dashed var(--border);">
+          <div class="card-header" style="margin-bottom: 14px; padding: 0;">
+            <div>
+              <h2>📋 Clipart Prompts</h2>
+              <p>Generated prompts for theme: <strong>{{ selected_trend.split('|')[0] }}</strong> in style: <em>{{ selected_trend.split('|')[1] }}</em></p>
+            </div>
+          </div>
+
+          <div class="form-stack">
+            {% for p in prompts %}
+              <div style="background: #f9fafb; border: 1px solid var(--border); border-radius: 12px; padding: 14px;">
+                <div style="font-weight: 700; font-size: 12px; color: var(--text); margin-bottom: 6px;">Element: <code>{{ p.name }}</code></div>
+                <div class="copy-row">
+                  <input readonly value="{{ p.prompt }}" data-copy-source="prompt-{{ loop.index }}" />
+                  <button type="button" class="secondary-btn" data-copy-target="prompt-{{ loop.index }}">Copy</button>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+    {% else %}
+      <div class="card-header">
+        <div>
+          <h2>Results</h2>
+        </div>
+      </div>
+      <div class="empty-state">
+        <strong>No research active</strong>
+        <span>Start a design search topic to crawl trends and generate prompts.</span>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

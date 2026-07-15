@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}EtsyTools Studio{% endblock %}</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-title">EtsyTools <span>Studio</span></div>
+        <div class="brand-subtitle">Local seller workspace</div>
+      </div>
+
+      <nav class="nav">
+        <a class="nav-item {% if active_page == 'listing' %}active{% endif %}" href="/listing">
+          <span class="nav-icon">✦</span>
+          <span>Listing Wizard</span>
+        </a>
+        <a class="nav-item {% if active_page == 'image_assist' %}active{% endif %}" href="/image-assist">
+          <span class="nav-icon">□</span>
+          <span>Image Assist</span>
+        </a>
+        <a class="nav-item {% if active_page == 'trend_research' %}active{% endif %}" href="/trend-research">
+          <span class="nav-icon">↗</span>
+          <span>Trend Research</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" class="secondary-btn" id="collapseBtn">Collapse sidebar</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <button type="button" class="restore-btn" id="restoreBtn">Show sidebar</button>
+
+      <header class="topbar">
+        <div>
+          <div class="app-title">EtsyTools Studio</div>
+          <div class="app-subtitle">Diagnostics and listing copy for local Etsy workflows</div>
+        </div>
+        <div class="status-row">
+          <span class="status-pill {% if gemini_connected %}ok{% else %}warn{% endif %}">
+            <span class="dot"></span> Gemini {% if gemini_connected %}Connected{% else %}Not configured{% endif %}
+          </span>
+          <span class="status-pill {% if tavily_connected %}ok{% else %}warn{% endif %}">
+            <span class="dot"></span> Tavily {% if tavily_connected %}Connected{% else %}Optional{% endif %}
+          </span>
+          <span class="status-pill ok"><span class="dot"></span> Local assets</span>
+        </div>
+      </header>
+
+      {% block content %}{% endblock %}
+    </main>
+
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+      <div class="spinner-container">
+        <div class="spinner" role="status" aria-live="polite"></div>
+        <p id="loadingMessage">Processing, please wait...</p>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+

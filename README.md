@@ -1,31 +1,31 @@
 # EtsyTools
 
-Local personal Streamlit workspace for Etsy seller production tasks:
+Local personal FastAPI workspace for Etsy seller production tasks:
 
 - PNG artwork diagnostics
-- mockup and infographic generation
 - AI-assisted Etsy listing drafts
-- clipart sheet splitting/background removal
-- trend research and prompt generation
 
 ## Run locally
+
+FastAPI/Jinja2 UI for the Listing Wizard:
 
 ```powershell
 .\run.ps1
 ```
 
-or:
+Then open:
 
-```powershell
-.\.venv\Scripts\streamlit.exe run app.py
+```text
+http://127.0.0.1:8000/listing
 ```
 
 ## Structure
 
 ```text
-app.py                    Streamlit UI entrypoint
-etsytools/ui/pages/       Split Streamlit page renderers
-etsytools/                Shared app package
+backend/main.py           FastAPI server entrypoint & router
+backend/templates/        Jinja2 HTML templates
+backend/static/           Custom CSS and client-side JS scripts
+etsytools/                Core application package
 etsytools/config.py       Env/config loading
 etsytools/paths.py        Workspace paths
 etsytools/storage/        Local JSON usage state
@@ -34,9 +34,7 @@ etsytools/services/       Business-logic wrappers
 tests/                    Lightweight unit tests
 ```
 
-The Streamlit shell stays in `app.py`; each major tool page lives under
-`etsytools/ui/pages/`. New business logic should go into `etsytools/` first,
-then the page renderers should call that logic.
+All web application routers and endpoints live inside `backend/main.py`. Page layout structures are housed inside the Jinja2 templates under `backend/templates/`. Core business logic resides under `etsytools/`.
 
 ## Safety note
 

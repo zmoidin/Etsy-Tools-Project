@@ -11,6 +11,7 @@ usage.json
 temp/
 generated/
 output/
+data/web_runtime/
 
 # Large/local AI assets
 FastSAM-s.pt
@@ -20,4 +21,3 @@ ImageAssist/realesrgan_engine/
 # OS/editor noise
 .DS_Store
 Thumbs.db
-
