@@ -1,0 +1,23 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# Local runtime state
+usage.json
+temp/
+generated/
+output/
+
+# Large/local AI assets
+FastSAM-s.pt
+data/models/*.pt
+ImageAssist/realesrgan_engine/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+

@@ -1,0 +1,21 @@
+# Shared requirements for EtsyTools (ImageAssist & AutoPNG)
+
+# ImageAssist dependencies
+Pillow
+numpy
+pytest
+opencv-python-headless
+Flask
+flask-cors
+ultralytics
+torch
+torchvision
+
+# AutoPNG dependencies
+streamlit
+google-genai
+pyyaml
+python-dotenv
+pydantic-settings
+loguru
+ruff

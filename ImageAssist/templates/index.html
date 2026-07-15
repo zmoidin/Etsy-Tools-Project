@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ImageAssist Web</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">✨</span>
+                <h2>ImageAssist</h2>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-btn active" data-target="auto-process">
+                    <span class="icon">🪄</span> Auto Process
+                </button>
+                <button class="nav-btn" data-target="mockup-showcase">
+                    <span class="icon">🖼️</span> Mockup Showcase
+                </button>
+                <button class="nav-btn" data-target="format-clipart">
+                    <span class="icon">✂️</span> Format Clipart
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <h1 id="tool-title">Auto Process</h1>
+                <p id="tool-desc">Automatically detect objects, slice, resize, and pad your clipart sheet to 3000x3000.</p>
+            </header>
+
+            <div class="content-area">
+                <!-- Auto Process View -->
+                <div id="auto-process" class="view active">
+                    <div class="settings-panel" style="margin-bottom: 20px; display: flex; gap: 20px; align-items: center;">
+                        <div>
+                            <label for="bg-type-select" style="font-weight: 500; margin-right: 10px;">Input Background:</label>
+                            <select id="bg-type-select" style="padding: 8px; border-radius: 6px; border: 1px solid #ddd; font-family: inherit;">
+                                <option value="transparent">Transparent (Default)</option>
+                                <option value="black">Solid Black</option>
+                                <option value="white">Solid White</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="canvas-color-select" style="font-weight: 500; margin-right: 10px;">Output Canvas:</label>
+                            <select id="canvas-color-select" style="padding: 8px; border-radius: 6px; border: 1px solid #ddd; font-family: inherit; margin-right: 10px;">
+                                <option value="transparent">Transparent (Default)</option>
+                                <option value="black">Solid Black</option>
+                                <option value="white">Solid White</option>
+                                <option value="custom">Custom Color...</option>
+                            </select>
+                            <input type="color" id="canvas-color-picker" value="#ffffff" style="display: none; vertical-align: middle; height: 35px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                    </div>
+                    <div class="drop-zone" id="drop-auto-process">
+                        <div class="drop-icon">📁</div>
+                        <h3>Drag & Drop Clipart Sheet Here</h3>
+                        <p>or click to select a file</p>
+                        <input type="file" id="file-auto-process" accept="image/*" hidden>
+                    </div>
+                </div>
+
+                <!-- Mockup Showcase View -->
+                <div id="mockup-showcase" class="view">
+                    <div class="drop-zone" id="drop-mockup-clipart">
+                        <div class="drop-icon">🎨</div>
+                        <h3>Drag & Drop Clipart Folder Here</h3>
+                        <p>Select multiple freshly cut pieces</p>
+                        <input type="file" id="file-mockup-clipart" webkitdirectory directory multiple hidden>
+                    </div>
+                    
+                    <div class="drop-zone" id="drop-mockup-bg" style="margin-top: 20px;">
+                        <div class="drop-icon">🌅</div>
+                        <h3>Drag Background Template Here (Optional)</h3>
+                        <p>Leave blank to auto-generate one</p>
+                        <input type="file" id="file-mockup-bg" accept="image/*" hidden>
+                    </div>
+                    
+                    <button class="primary-btn" id="btn-run-mockup" style="margin-top: 20px;">Generate Mockup</button>
+                </div>
+
+                <!-- Format Clipart View -->
+                <div id="format-clipart" class="view">
+                    <div class="drop-zone" id="drop-format-clipart">
+                        <div class="drop-icon">📦</div>
+                        <h3>Drag & Drop Clipart Folder Here</h3>
+                        <p>Removes background and pads all files in folder</p>
+                        <input type="file" id="file-format-clipart" webkitdirectory directory multiple hidden>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Overlay -->
+            <div id="loading-overlay" class="loading-overlay hidden">
+                <div class="spinner"></div>
+                <h3 id="loading-text">Processing your images...</h3>
+            </div>
+            
+            <div id="toast" class="toast hidden">Success! Check your folder.</div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

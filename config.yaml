@@ -1,0 +1,91 @@
+# AutoPNG Product Configurations & Theme Settings
+
+# Standard Etsy product definitions for artwork validation
+products:
+  tshirt:
+    name: "T-Shirt"
+    width: 4600
+    height: 5000
+    dpi: 300
+    description: "Standard T-shirt print area (approx. 15x17 inches at 300 DPI)"
+  sweatshirt:
+    name: "Sweatshirt / Hoodie"
+    width: 4500
+    height: 5400
+    dpi: 300
+    description: "Standard sweatshirt print area (300 DPI)"
+  mug_11oz:
+    name: "Mug (11oz)"
+    width: 2700
+    height: 1050
+    dpi: 300
+    description: "Full wrap mug print area (9x3.5 inches at 300 DPI)"
+  tote_bag:
+    name: "Tote Bag"
+    width: 3750
+    height: 3750
+    dpi: 300
+    description: "Square tote bag print area (12.5x12.5 inches at 300 DPI)"
+  digital_2_3:
+    name: "Digital Art (2:3 Ratio)"
+    width: 7200
+    height: 10800
+    dpi: 300
+    description: "2:3 ratio print file for 24x36, 20x30, 16x24, 12x18, 8x12 inches"
+  digital_3_4:
+    name: "Digital Art (3:4 Ratio)"
+    width: 5400
+    height: 7200
+    dpi: 300
+    description: "3:4 ratio print file for 18x24, 15x20, 12x16, 9x12 inches"
+  digital_4_5:
+    name: "Digital Art (4:5 Ratio)"
+    width: 4800
+    height: 6000
+    dpi: 300
+    description: "4:5 ratio print file for 16x20, 8x10, 4x5 inches"
+  digital_iso:
+    name: "Digital Art (ISO Paper Size)"
+    width: 7016
+    height: 9933
+    dpi: 300
+    description: "ISO paper size (A1, A2, A3, A4, A5)"
+
+# Design parameters for programmatically generated infographics
+infographics:
+  theme:
+    bg_color: "#FAF8F5"       # Warm Off-White
+    text_color: "#2C2C2C"     # Dark Charcoal
+    accent_color: "#D4A373"   # Soft Terra Cotta
+    muted_color: "#8D99AE"    # Slate Gray
+    border_color: "#E6DFD5"   # Light Beige
+  fonts:
+    title: "arial.ttf"
+    body: "arial.ttf"
+
+# Brand watermark / logo configuration
+brand:
+  watermark_logo_path: ""     # Left blank for user upload
+  default_alpha: 0.15         # 15% opacity
+  default_position: "bottom-right"  # top-left, top-right, bottom-left, bottom-right, center
+  default_padding: 40         # Pixels from edges
+  default_scale: 0.12         # Scale relative to mockup canvas width
+
+# Mockup overlay default coordinates (relative: 0.0 to 1.0)
+mockup_overlay_defaults:
+  tshirt:
+    center_x: 0.50
+    center_y: 0.45
+    width_fraction: 0.35
+  sweatshirt:
+    center_x: 0.50
+    center_y: 0.48
+    width_fraction: 0.33
+  mug_11oz:
+    center_x: 0.50
+    center_y: 0.50
+    width_fraction: 0.45
+  tote_bag:
+    center_x: 0.50
+    center_y: 0.52
+    width_fraction: 0.40
