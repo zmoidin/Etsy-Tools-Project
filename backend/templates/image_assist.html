@@ -12,6 +12,7 @@
     <a href="/image-assist?tool=splitter" class="tab-btn {% if active_tool == 'splitter' %}active{% endif %}">Sheet Splitter</a>
     <a href="/image-assist?tool=batch" class="tab-btn {% if active_tool == 'batch' %}active{% endif %}">Batch Formatter</a>
     <a href="/image-assist?tool=collage" class="tab-btn {% if active_tool == 'collage' %}active{% endif %}">Showcase Collage</a>
+    <a href="/image-assist?tool=upscaler" class="tab-btn {% if active_tool == 'upscaler' %}active{% endif %}">Custom Upscaler</a>
   </nav>
 
   {% if error %}
@@ -111,6 +112,42 @@
           </div>
         </div>
       </form>
+    {% elif active_tool == 'upscaler' %}
+      <form action="/image-assist/upscaler" method="post" enctype="multipart/form-data" class="form-stack">
+        <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; width: 100%;">
+          <div style="flex: 2; min-width: 220px;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">Target image</span>
+              <input type="file" name="image" accept="image/png, image/jpeg, image/jpg, image/webp" required style="padding: 8px;" />
+            </label>
+          </div>
+
+          <div style="flex: 1; min-width: 110px;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">Width (px)</span>
+              <input type="number" name="width" value="3000" min="100" max="10000" required style="padding: 8px 12px;" />
+            </label>
+          </div>
+
+          <div style="flex: 1; min-width: 110px;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">Height (px)</span>
+              <input type="number" name="height" value="3000" min="100" max="10000" required style="padding: 8px 12px;" />
+            </label>
+          </div>
+
+          <div style="flex: 0.8; min-width: 90px;">
+            <label style="margin: 0;">
+              <span style="margin-bottom: 4px;">DPI</span>
+              <input type="number" name="dpi" value="300" min="72" max="1200" required style="padding: 8px 12px;" />
+            </label>
+          </div>
+
+          <div style="flex-shrink: 0;">
+            <button type="submit" class="primary-btn" data-loading-msg="Upscaling and resizing image..." style="height: 38px; margin: 0; padding: 10px 20px; white-space: nowrap;">Run Custom Upscaler</button>
+          </div>
+        </div>
+      </form>
     {% endif %}
   </div>
 
@@ -175,6 +212,18 @@
         <div class="empty-state" style="min-height: 250px;">
           <strong>No showcase collage generated yet</strong>
           <span>Upload transparent assets and select background texture to render collage.</span>
+        </div>
+      {% endif %}
+    {% elif active_tool == 'upscaler' %}
+      {% if upscaled_url %}
+        <div class="image-frame checkerboard" style="margin-bottom: 18px; min-height: 250px;">
+          <img src="{{ upscaled_url }}" alt="Upscaled image output" style="max-height: 250px; object-fit: contain; margin: 0 auto; display: block;" />
+        </div>
+        <a href="{{ upscaled_url }}" download="upscaled_image.png" class="primary-btn" style="display: block; text-decoration: none; text-align: center;">📥 Download Upscaled Image</a>
+      {% else %}
+        <div class="empty-state" style="min-height: 250px;">
+          <strong>No image upscaled yet</strong>
+          <span>Upload an image and specify dimensions to generate your high-resolution output.</span>
         </div>
       {% endif %}
     {% endif %}

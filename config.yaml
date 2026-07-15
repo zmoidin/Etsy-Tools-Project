@@ -15,41 +15,35 @@ products:
     dpi: 300
     description: "Standard sweatshirt print area (300 DPI)"
   mug_11oz:
-    name: "Mug (11oz)"
+    name: "Mug"
     width: 2700
     height: 1050
     dpi: 300
-    description: "Full wrap mug print area (9x3.5 inches at 300 DPI)"
+    description: "Full wrap mug print area (300 DPI)"
   tote_bag:
     name: "Tote Bag"
     width: 3750
     height: 3750
     dpi: 300
-    description: "Square tote bag print area (12.5x12.5 inches at 300 DPI)"
-  digital_2_3:
-    name: "Digital Art (2:3 Ratio)"
-    width: 7200
-    height: 10800
-    dpi: 300
-    description: "2:3 ratio print file for 24x36, 20x30, 16x24, 12x18, 8x12 inches"
-  digital_3_4:
-    name: "Digital Art (3:4 Ratio)"
+    description: "Square tote bag print area (300 DPI)"
+  digital_art:
+    name: "Digital Wall Art Poster"
     width: 5400
     height: 7200
     dpi: 300
-    description: "3:4 ratio print file for 18x24, 15x20, 12x16, 9x12 inches"
-  digital_4_5:
-    name: "Digital Art (4:5 Ratio)"
-    width: 4800
-    height: 6000
+    description: "High-resolution digital printable art files for home decor prints (300 DPI)"
+  clipart_item:
+    name: "Clipart Item"
+    width: 3000
+    height: 3000
     dpi: 300
-    description: "4:5 ratio print file for 16x20, 8x10, 4x5 inches"
-  digital_iso:
-    name: "Digital Art (ISO Paper Size)"
-    width: 7016
-    height: 9933
-    dpi: 300
-    description: "ISO paper size (A1, A2, A3, A4, A5)"
+    description: "Individual transparent clipart elements in a bundle (300 DPI)"
+
+digital_formats:
+  sublimation_png: "Single PNG Sublimation Design"
+  clipart_bundle: "Clipart Pack / PNG Bundle"
+  seamless_pattern: "Seamless Pattern / Digital Paper"
+  digital_art: "Digital Wall Art Poster"
 
 # Design parameters for programmatically generated infographics
 infographics:

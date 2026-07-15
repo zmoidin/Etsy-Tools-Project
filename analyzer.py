@@ -6,7 +6,7 @@ def load_config():
     """Loads the config.yaml file."""
     return _load_config()
 
-def analyze_artwork(image_path, target_product_key=None):
+def analyze_artwork(image_path, target_product_keys=None):
     """
     Analyzes the uploaded PNG artwork:
     - Dimensions (pixels)
@@ -76,12 +76,22 @@ def analyze_artwork(image_path, target_product_key=None):
                 result["dpi"] = 72
                 result["recommendations"].append("DPI metadata was not found. Defaulted to web-standard 72 DPI. Print files should explicitly embed 300 DPI metadata.")
 
-        if target_product_key and target_product_key in products:
-            target = products[target_product_key]
-            target_w = target["width"]
-            target_h = target["height"]
-            target_dpi = target["dpi"]
-            product_name = target["name"]
+        # Handle target_product_keys (can be a string, a list, or None)
+        valid_keys = []
+        if target_product_keys:
+            if isinstance(target_product_keys, str):
+                valid_keys = [k.strip() for k in target_product_keys.split(",") if k.strip() in products]
+            elif isinstance(target_product_keys, (list, set, tuple)):
+                valid_keys = [k for k in target_product_keys if k in products]
+
+        if valid_keys:
+            # Match against the largest target dimensions and DPI
+            target_w = max(products[k]["width"] for k in valid_keys)
+            target_h = max(products[k]["height"] for k in valid_keys)
+            target_dpi = max(products[k]["dpi"] for k in valid_keys)
+            
+            product_names = [products[k]["name"] for k in valid_keys]
+            product_names_str = ", ".join(product_names)
             
             # DPI Check
             dpi_ok = result["dpi"] >= target_dpi
@@ -92,7 +102,7 @@ def analyze_artwork(image_path, target_product_key=None):
                 "label": f"DPI Check (Has {result['dpi']}, Needs {target_dpi})"
             }
             if not dpi_ok:
-                result["recommendations"].append(f"DPI is too low for a physical {product_name}. Etsy buyers and Print-On-Demand providers require at least {target_dpi} DPI. Resave artwork with 300 DPI settings.")
+                result["recommendations"].append(f"DPI is too low for the selected targets ({product_names_str}). Resave artwork with 300 DPI settings.")
                 
             # Dimensions Check
             dim_ok = (result["width"] >= target_w) and (result["height"] >= target_h)
@@ -103,27 +113,32 @@ def analyze_artwork(image_path, target_product_key=None):
                 "label": f"Dimensions Check (Has {result['width']}x{result['height']}, Needs at least {target_w}x{target_h})"
             }
             if not dim_ok:
-                result["recommendations"].append(f"Image dimensions ({result['width']}x{result['height']} px) are smaller than the recommended size for a {product_name} ({target_w}x{target_h} px). Printing at this resolution may cause blurriness or pixelation.")
+                result["recommendations"].append(f"Image dimensions ({result['width']}x{result['height']} px) are smaller than the required maximum size ({target_w}x{target_h} px) for targeted products ({product_names_str}). Printing may cause blurriness.")
             
-            # Aspect Ratio Check (Optimization 1)
-            target_ratio = target_w / target_h
-            ratio_diff = abs(result["aspect_ratio"] - target_ratio)
-            ratio_ok = ratio_diff <= 0.05
-            
+            # Aspect Ratio Check (matches at least one checked template)
+            ratio_ok = False
+            closest_ratios = []
+            for k in valid_keys:
+                t = products[k]
+                t_ratio = t["width"] / t["height"]
+                diff = abs(result["aspect_ratio"] - t_ratio)
+                if diff <= 0.05:
+                    ratio_ok = True
+                closest_ratios.append(f"{t_ratio:.2f} ({t['name']})")
+                
             result["checks"]["aspect_ratio"] = {
                 "ok": ratio_ok,
                 "current": f"{result['aspect_ratio']:.2f}",
-                "required": f"{target_ratio:.2f}",
-                "label": f"Aspect Ratio Check (Has {result['aspect_ratio']:.2f}, Needs ~{target_ratio:.2f})"
+                "required": " or ".join(closest_ratios),
+                "label": f"Aspect Ratio Check (Has {result['aspect_ratio']:.2f})"
             }
             if not ratio_ok:
                 result["recommendations"].append(
-                    f"Aspect ratio mismatch! The artwork ratio ({result['aspect_ratio']:.2f}) does not match the product template "
-                    f"'{product_name}' aspect ratio ({target_ratio:.2f}). Composing mockups or printing directly may result in "
-                    f"unwanted cropping, stretching, or empty borders."
+                    f"Aspect ratio ({result['aspect_ratio']:.2f}) does not match any of your selected templates. "
+                    f"This may require custom positioning when composing mockups."
                 )
             
-            result["is_ready"] = dpi_ok and dim_ok and ratio_ok
+            result["is_ready"] = dpi_ok and dim_ok
             
         else:
             best_match = None

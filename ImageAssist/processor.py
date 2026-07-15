@@ -518,3 +518,43 @@ def color_shift_interactive(input_path, output_dir):
     
     update_preview()
     root.mainloop()
+
+
+def upscale_and_resize_general_image(input_path, target_width, target_height, target_dpi, output_path):
+    print(f"Upscaling general image {os.path.basename(input_path)} to {target_width}x{target_height} at {target_dpi} DPI...")
+    
+    img = Image.open(input_path).convert("RGBA")
+    
+    # Try initializing RealESRGAN
+    realesrgan_exe = None
+    try:
+        realesrgan_exe = init_realesrgan()
+    except Exception as e:
+        print(f"Could not setup RealESRGAN engine: {e}. Will fallback to basic resizing.")
+        
+    if realesrgan_exe is not None:
+        import subprocess
+        output_dir = os.path.dirname(output_path)
+        temp_in = os.path.join(output_dir, "temp_upscale_in.png")
+        temp_out = os.path.join(output_dir, "temp_upscale_out.png")
+        img.save(temp_in, "PNG")
+        try:
+            subprocess.run([realesrgan_exe, '-i', temp_in, '-o', temp_out, '-n', 'realesrgan-x4plus', '-s', '4'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if os.path.exists(temp_out):
+                img = Image.open(temp_out).convert("RGBA")
+                os.remove(temp_out)
+            if os.path.exists(temp_in):
+                os.remove(temp_in)
+        except Exception as e:
+            print(f"AI Upscale failed: {e}. Falling back to basic resizing.")
+            if os.path.exists(temp_in):
+                os.remove(temp_in)
+            if os.path.exists(temp_out):
+                os.remove(temp_out)
+                
+    # Resize to exact target size
+    img_resized = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+    
+    # Save with custom DPI settings
+    img_resized.save(output_path, "PNG", dpi=(target_dpi, target_dpi))
+    print(f"Upscaled image successfully saved to: {output_path}")

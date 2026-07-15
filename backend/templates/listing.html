@@ -24,64 +24,65 @@
     <div class="alert warning">{{ error }}</div>
   {% endif %}
 
-  <!-- Top Card: Upload & Check & Preview -->
+  <!-- Top Card: Upload & Check (Inputs & Buttons Only) -->
   <div class="card" style="margin-bottom: 22px;">
+    <form action="/listing/analyze" method="post" enctype="multipart/form-data" class="form-stack">
+      <label>
+        <span>Digital Format</span>
+        <select name="digital_format" style="padding: 9px 12px;">
+          {% for fmt in digital_formats %}
+            <option value="{{ fmt.key }}" {% if fmt.key == selected_format %}selected{% endif %}>{{ fmt.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
 
+      <label style="margin-top: 14px; margin-bottom: 14px;">
+        <span style="display: block; margin-bottom: 8px;">Target Physical Applications (DPI/Dimension Check)</span>
+        <div style="display: flex; flex-direction: column; gap: 8px; background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px;">
+          {% for prod in products %}
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; margin: 0;">
+              <input type="checkbox" name="targets" value="{{ prod.key }}" {% if prod.key in selected_targets %}checked{% endif %} style="width: 16px; height: 16px; accent-color: var(--blue);" />
+              <span>{{ prod.name }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </label>
 
-    <div class="grid two-col" style="gap: 32px; align-items: start;">
-      <div>
-        <form action="/listing/analyze" method="post" enctype="multipart/form-data" class="form-stack">
-          <label>
-            <span>Product type</span>
-            <select name="product_type">
-              {% for product in products %}
-                <option value="{{ product.key }}" {% if product.key == selected_product %}selected{% endif %}>{{ product.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
+      <label style="margin-top: 14px; margin-bottom: 14px;">
+        <span>SEO Target Keywords / Niche (optional)</span>
+        <input type="text" name="seo_keywords" value="{{ seo_keywords or '' }}" placeholder="e.g. retro cottagecore halloween cat" style="padding: 8px 12px;" />
+        <span class="help-text">Injects live Etsy competitor search results into your listing's SEO metadata draft.</span>
+      </label>
 
-          <label class="upload-box">
-            <input type="file" name="artwork" accept="image/png" required />
-            <span class="upload-title">Upload artwork PNG</span>
-            <span class="upload-text">Drag or choose a transparent PNG file.</span>
-          </label>
+      <label class="upload-box">
+        <input type="file" name="artwork" accept="image/png" required />
+        <span class="upload-title">Upload artwork PNG</span>
+        <span class="upload-text">Drag or choose a transparent PNG file.</span>
+      </label>
 
-          <button type="submit" class="primary-btn" data-loading-msg="Running print resolution diagnostics...">Run diagnostics</button>
-        </form>
+      <button type="submit" class="primary-btn" data-loading-msg="Running print resolution diagnostics...">Run diagnostics</button>
+    </form>
 
-        {% if image_id and analysis %}
-          <form action="/listing/generate" method="post" class="form-stack continue-form">
-            <input type="hidden" name="product_type" value="{{ selected_product }}" />
-            <input type="hidden" name="image_id" value="{{ image_id }}" />
-            {% if analysis.is_ready %}
-              <button type="submit" class="primary-btn" data-loading-msg="AI is drafting SEO keywords & listing copy...">Generate listing copy</button>
-            {% else %}
-              <button type="button" class="primary-btn" disabled style="background: #9ca3af; border-color: #9ca3af; color: #ffffff; cursor: not-allowed; opacity: 0.7;">Generate listing copy</button>
-              <span class="help-text" style="color: #ea580c; font-weight: 700; margin-top: 8px;">⚠️ Resolving diagnostics checks is required before copy generation.</span>
-            {% endif %}
-          </form>
-        {% endif %}
-      </div>
-
-      <!-- Preview Image Frame on the Right -->
-      <div style="display: flex; flex-direction: column; height: 100%;">
-        <span style="font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 7px;">Image Preview</span>
-        {% if image_url %}
-          <div class="image-frame checkerboard" style="min-height: 280px; height: 100%;">
-            <img src="{{ image_url }}" alt="Uploaded artwork preview" style="max-height: 270px; object-fit: contain; margin: 0 auto; display: block;" />
-          </div>
+    {% if image_id and analysis %}
+      <form action="/listing/generate" method="post" class="form-stack continue-form" style="margin-top: 14px;">
+        <input type="hidden" name="digital_format" value="{{ selected_format }}" />
+        {% for target in selected_targets %}
+          <input type="hidden" name="targets" value="{{ target }}" />
+        {% endfor %}
+        <input type="hidden" name="image_id" value="{{ image_id }}" />
+        <input type="hidden" name="seo_keywords" value="{{ seo_keywords or '' }}" />
+        {% if analysis.is_ready %}
+          <button type="submit" class="primary-btn" data-loading-msg="AI is drafting SEO keywords & listing copy...">Generate listing copy</button>
         {% else %}
-          <div class="empty-state" style="min-height: 280px; height: 100%;">
-            <strong>No artwork uploaded yet</strong>
-            <span>Upload a PNG to start the workflow.</span>
-          </div>
+          <button type="button" class="primary-btn" disabled style="background: #9ca3af; border-color: #9ca3af; color: #ffffff; cursor: not-allowed; opacity: 0.7;">Generate listing copy</button>
+          <span class="help-text" style="color: #ea580c; font-weight: 700; margin-top: 8px;">⚠️ Resolving diagnostics checks is required before copy generation.</span>
         {% endif %}
-      </div>
-    </div>
+      </form>
+    {% endif %}
   </div>
 
   {% if analysis %}
-    <section class="card diagnostics-card">
+    <section class="card diagnostics-card" style="margin-bottom: 22px;">
       <div class="card-header">
         <div>
           <h2>Artwork Diagnostics</h2>
@@ -94,29 +95,44 @@
         {% endif %}
       </div>
 
-      <div class="metrics">
-        <div class="metric">
-          <span>Dimensions</span>
-          <strong>{{ analysis.width }} × {{ analysis.height }} px</strong>
+      <div class="grid two-col" style="gap: 32px; align-items: start;">
+        <!-- Left Column: Results -->
+        <div>
+          <div class="metrics" style="margin-top: 0;">
+            <div class="metric">
+              <span>Dimensions</span>
+              <strong>{{ analysis.width }} × {{ analysis.height }} px</strong>
+            </div>
+            <div class="metric">
+              <span>DPI</span>
+              <strong>{{ analysis.dpi }}</strong>
+            </div>
+            <div class="metric">
+              <span>Aspect Ratio</span>
+              <strong>{{ analysis.aspect_ratio_str }}</strong>
+            </div>
+          </div>
+
+          {% if analysis.recommendations %}
+            <div class="recommendations" style="margin-top: 20px;">
+              <h3>Findings & Recommendations</h3>
+              {% for rec in analysis.recommendations %}
+                <div class="alert" style="margin-bottom: 8px;">{{ rec }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
         </div>
-        <div class="metric">
-          <span>DPI</span>
-          <strong>{{ analysis.dpi }}</strong>
-        </div>
-        <div class="metric">
-          <span>Aspect Ratio</span>
-          <strong>{{ analysis.aspect_ratio_str }}</strong>
+
+        <!-- Right Column: Image Preview -->
+        <div>
+          <span style="font-size: 13px; font-weight: 700; color: var(--text); display: block; margin-bottom: 7px;">Image Preview</span>
+          {% if image_url %}
+            <div class="image-frame checkerboard" style="min-height: 250px; height: 100%;">
+              <img src="{{ image_url }}" alt="Uploaded artwork preview" style="max-height: 250px; object-fit: contain; margin: 0 auto; display: block;" />
+            </div>
+          {% endif %}
         </div>
       </div>
-
-      {% if analysis.recommendations %}
-        <div class="recommendations">
-          <h3>Findings & Recommendations</h3>
-          {% for rec in analysis.recommendations %}
-            <div class="alert">{{ rec }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
     </section>
   {% endif %}
 
