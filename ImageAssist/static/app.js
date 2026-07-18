@@ -7,8 +7,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const descriptions = {
         'auto-process': 'Automatically detect objects, slice, resize, and pad your clipart sheet to 3000x3000.',
-        'mockup-showcase': 'Automatically arrange all clipart pieces onto a single beautiful showcase listing image.',
-        'format-clipart': 'Format images for Etsy clipart (remove BG, 3000x3000px padding, 300 DPI)'
+        'image-resizer': 'Resize a single image to multiple dimensions and download a ZIP archive containing all resized versions.',
+        'format-clipart': 'Format images for Etsy clipart (remove BG, 3000x3000px padding, 300 DPI)',
+        'bulk-renamer': 'Sequentially rename files in a folder using a custom text pattern.'
     };
 
     navBtns.forEach(btn => {
@@ -196,41 +197,150 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     });
 
-    // Mockup Showcase logic
-    let mockupClipartFiles = [];
-    let mockupBgFile = null;
+    // Image Resizer Logic
+    let resizeImageFile = null;
+    const container = document.getElementById('dimension-rows-container');
 
-    setupDropZone('drop-mockup-clipart', 'file-mockup-clipart', (files) => {
-        mockupClipartFiles = files;
-    });
-    
-    setupDropZone('drop-mockup-bg', 'file-mockup-bg', (files) => {
+    setupDropZone('drop-resize-image', 'file-resize-image', (files) => {
         if (files && files.length) {
-            mockupBgFile = files[0];
+            resizeImageFile = files[0];
         }
     });
 
-    document.getElementById('btn-run-mockup').addEventListener('click', () => {
-        if(!mockupClipartFiles || !mockupClipartFiles.length) {
-            alert("Please select a clipart folder first!");
+    // Helper to manage dynamic rows
+    const updatePlusButtonVisibility = () => {
+        const rows = container.querySelectorAll('.dimension-row');
+        const firstRowBtn = container.querySelector('.dimension-row:first-child .add-dim-btn');
+        if (firstRowBtn) {
+            if (rows.length >= 5) {
+                firstRowBtn.style.display = 'none';
+            } else {
+                firstRowBtn.style.display = 'flex';
+            }
+        }
+    };
+
+    // Listen for click on the first row's '+' button
+    container.addEventListener('click', (e) => {
+        if (e.target.classList.contains('add-dim-btn')) {
+            const rows = container.querySelectorAll('.dimension-row');
+            if (rows.length >= 5) return;
+
+            // Create new row
+            const newRow = document.createElement('div');
+            newRow.className = 'dimension-row';
+            newRow.innerHTML = `
+                <input type="number" class="dim-width" placeholder="Width (px)" required min="1">
+                <span class="dim-separator">×</span>
+                <input type="number" class="dim-height" placeholder="Height (px)" required min="1">
+                <button type="button" class="remove-dim-btn" title="Remove this size">×</button>
+            `;
+            container.appendChild(newRow);
+            updatePlusButtonVisibility();
+        } else if (e.target.classList.contains('remove-dim-btn')) {
+            // Remove row
+            const row = e.target.closest('.dimension-row');
+            if (row) {
+                row.remove();
+                updatePlusButtonVisibility();
+            }
+        }
+    });
+
+    document.getElementById('btn-run-resize').addEventListener('click', () => {
+        if (!resizeImageFile) {
+            alert("Error: Please select or drop a target PNG image file first!");
             return;
         }
 
-        const formData = new FormData();
-        for(let i=0; i<mockupClipartFiles.length; i++) {
-            formData.append('files[]', mockupClipartFiles[i]);
-        }
-        if(mockupBgFile) {
-            formData.append('background', mockupBgFile);
+        const widthInputs = container.querySelectorAll('.dim-width');
+        const heightInputs = container.querySelectorAll('.dim-height');
+        
+        const widths = [];
+        const heights = [];
+        
+        for (let i = 0; i < widthInputs.length; i++) {
+            const wVal = parseInt(widthInputs[i].value);
+            const hVal = parseInt(heightInputs[i].value);
+            
+            if (isNaN(wVal) || wVal <= 0 || isNaN(hVal) || hVal <= 0) {
+                alert("Error: Please fill in a valid width and height (positive integers) for all dimension rows!");
+                return;
+            }
+            
+            widths.push(wVal);
+            heights.push(hVal);
         }
 
-        showLoading("Generating drop shadows and arranging layout...");
-        fetch('/api/mockup-showcase', { method: 'POST', body: formData })
-            .then(res => res.json())
-            .then(data => {
+        const formData = new FormData();
+        formData.append('file', resizeImageFile);
+        widths.forEach(w => formData.append('widths[]', w));
+        heights.forEach(h => formData.append('heights[]', h));
+
+        showLoading("Resizing image to requested sizes...");
+        
+        fetch('/api/image-resizer', { method: 'POST', body: formData })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => { throw new Error(err.error || 'Server error'); });
+                }
+                const contentDisposition = res.headers.get('Content-Disposition');
+                let filename = 'resized_images.zip';
+                if (contentDisposition) {
+                    const match = contentDisposition.match(/filename="?([^"]+)"?/);
+                    if (match) filename = match[1];
+                }
+                return res.blob().then(blob => ({ blob, filename }));
+            })
+            .then(({ blob, filename }) => {
                 hideLoading();
-                if(data.success) showToast(data.message);
-                else alert("Error: " + data.error);
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                showToast("Images resized and ZIP downloaded!");
+            })
+            .catch(err => {
+                hideLoading();
+                alert("Error: " + err.message);
             });
+    });
+
+    // Bulk Renamer logic
+    document.getElementById('btn-run-rename').addEventListener('click', () => {
+        const folderPath = document.getElementById('rename-folder-path').value.trim();
+        const baseText = document.getElementById('rename-base-text').value.trim();
+        
+        if (!folderPath || !baseText) {
+            alert("Error: Folder path and base rename text are both required!");
+            return;
+        }
+        
+        showLoading("Renaming files in folder...");
+        
+        fetch('/api/bulk-renamer', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ folder_path: folderPath, base_text: baseText })
+        })
+        .then(res => res.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showToast(data.message);
+            } else {
+                alert("Error: " + data.error);
+            }
+        })
+        .catch(err => {
+            hideLoading();
+            alert("Error: " + err.message);
+        });
     });
 });

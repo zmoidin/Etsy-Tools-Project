@@ -27,40 +27,50 @@
   <!-- Top Card: Upload & Check (Inputs & Buttons Only) -->
   <div class="card" style="margin-bottom: 22px;">
     <form action="/listing/analyze" method="post" enctype="multipart/form-data" class="form-stack">
-      <label>
-        <span>Digital Format</span>
-        <select name="digital_format" style="padding: 9px 12px;">
-          {% for fmt in digital_formats %}
-            <option value="{{ fmt.key }}" {% if fmt.key == selected_format %}selected{% endif %}>{{ fmt.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-
-      <label style="margin-top: 14px; margin-bottom: 14px;">
-        <span style="display: block; margin-bottom: 8px;">Target Physical Applications (DPI/Dimension Check)</span>
-        <div style="display: flex; flex-direction: column; gap: 8px; background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px;">
-          {% for prod in products %}
-            <label style="display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; margin: 0;">
-              <input type="checkbox" name="targets" value="{{ prod.key }}" {% if prod.key in selected_targets %}checked{% endif %} style="width: 16px; height: 16px; accent-color: var(--blue);" />
-              <span>{{ prod.name }}</span>
-            </label>
-          {% endfor %}
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; width: 100%; align-items: flex-start; margin-bottom: 14px;">
+        <div style="flex: 1; min-width: 200px;">
+          <label style="margin: 0;">
+            <span>Digital Format</span>
+            <select name="digital_format" style="padding: 9px 12px; border-radius: 8px;">
+              {% for fmt in digital_formats %}
+                <option value="{{ fmt.key }}" {% if fmt.key == selected_format %}selected{% endif %}>{{ fmt.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
         </div>
-      </label>
 
-      <label style="margin-top: 14px; margin-bottom: 14px;">
-        <span>SEO Target Keywords / Niche (optional)</span>
-        <input type="text" name="seo_keywords" value="{{ seo_keywords or '' }}" placeholder="e.g. retro cottagecore halloween cat" style="padding: 8px 12px;" />
-        <span class="help-text">Injects live Etsy competitor search results into your listing's SEO metadata draft.</span>
-      </label>
+        <div style="flex: 1; min-width: 200px;">
+          <label style="margin: 0;">
+            <span>Target (DPI/Dimension Check)</span>
+            <select name="targets" style="padding: 9px 12px; border-radius: 8px;">
+              {% for prod in products %}
+                <option value="{{ prod.key }}" {% if prod.key in selected_targets %}selected{% endif %}>{{ prod.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
 
-      <label class="upload-box">
-        <input type="file" name="artwork" accept="image/png" required />
-        <span class="upload-title">Upload artwork PNG</span>
-        <span class="upload-text">Drag or choose a transparent PNG file.</span>
-      </label>
+        <div style="flex: 2; min-width: 300px;">
+          <label style="margin: 0;">
+            <span>SEO Target Keywords / Niche (optional)</span>
+            <input type="text" name="seo_keywords" value="{{ seo_keywords or '' }}" placeholder="e.g. retro cottagecore halloween cat" style="padding: 8px 12px; border-radius: 8px;" />
+          </label>
+        </div>
+      </div>
 
-      <button type="submit" class="primary-btn" data-loading-msg="Running print resolution diagnostics...">Run diagnostics</button>
+      <div style="display: flex; gap: 16px; align-items: stretch; margin-top: 14px; flex-wrap: wrap;">
+        <div style="flex: 2; min-width: 250px;">
+          <label class="upload-box" style="margin: 0; padding: 8px 16px; height: 100%; display: flex; align-items: center; justify-content: center; min-height: 42px; text-align: center; border-radius: 8px; border-style: dashed;">
+            <input type="file" name="artwork" accept="image/png" required />
+            <span class="upload-title" style="font-size: 13px; font-weight: 600;">Upload artwork PNG (Drag or Click)</span>
+          </label>
+        </div>
+        <div style="flex: 1; min-width: 150px; display: flex; align-items: stretch;">
+          <button type="submit" class="primary-btn" data-loading-msg="Running print resolution diagnostics..." style="width: 100%; margin: 0; height: 100%; min-height: 42px; font-size: 13px; font-weight: 700; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 8px 16px;">
+            Run diagnostics
+          </button>
+        </div>
+      </div>
     </form>
 
     {% if image_id and analysis %}

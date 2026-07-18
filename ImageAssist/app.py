@@ -3,7 +3,7 @@ import shutil
 import time
 import threading
 import webbrowser
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, send_file
 from flask_cors import CORS
 import processor
 
@@ -48,31 +48,44 @@ def auto_process():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/mockup-showcase', methods=['POST'])
-def mockup_showcase():
-    if 'files[]' not in request.files:
-        return jsonify({'error': 'No clipart files uploaded'}), 400
+@app.route('/api/image-resizer', methods=['POST'])
+def image_resizer():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
         
-    files = request.files.getlist('files[]')
-    bg_file = request.files.get('background')
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+        
+    widths_raw = request.form.getlist('widths[]')
+    heights_raw = request.form.getlist('heights[]')
     
-    session_dir = cleanup_and_get_session_dir()
-    clipart_dir = os.path.join(session_dir, 'Clipart')
-    processor.ensure_dir(clipart_dir)
-    
-    for f in files:
-        if f.filename:
-            f.save(os.path.join(clipart_dir, os.path.basename(f.filename)))
-            
-    bg_path = None
-    if bg_file and bg_file.filename:
-        bg_path = os.path.join(session_dir, os.path.basename(bg_file.filename))
-        bg_file.save(bg_path)
+    if not widths_raw or not heights_raw or len(widths_raw) != len(heights_raw):
+        return jsonify({'error': 'Invalid dimensions specified'}), 400
         
     try:
-        processor.create_showcase_mockup(clipart_dir, bg_path)
-        os.startfile(clipart_dir)
-        return jsonify({'success': True, 'message': 'Mockup created!'})
+        sizes = []
+        for w, h in zip(widths_raw, heights_raw):
+            sizes.append((int(w), int(h)))
+    except ValueError:
+        return jsonify({'error': 'Dimensions must be integers'}), 400
+        
+    session_dir = cleanup_and_get_session_dir()
+    input_path = os.path.join(session_dir, os.path.basename(file.filename))
+    file.save(input_path)
+    
+    base_name = os.path.splitext(os.path.basename(file.filename))[0]
+    zip_filename = f"{base_name}_resized.zip"
+    zip_path = os.path.join(session_dir, zip_filename)
+    
+    try:
+        processor.resize_image_multiple_sizes(input_path, sizes, zip_path)
+        
+        # Open directory for local users
+        if os.path.exists(session_dir):
+            os.startfile(session_dir)
+            
+        return send_file(zip_path, as_attachment=True, download_name=zip_filename)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -94,6 +107,26 @@ def format_clipart():
         if os.path.exists(results_dir):
             os.startfile(results_dir)
         return jsonify({'success': True, 'message': 'Formatting complete!'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bulk-renamer', methods=['POST'])
+def bulk_renamer():
+    data = request.get_json() or request.form
+    folder_path = data.get('folder_path')
+    base_text = data.get('base_text')
+    
+    if not folder_path or not base_text:
+        return jsonify({'error': 'Folder path and base text are both required.'}), 400
+        
+    folder_path = os.path.abspath(folder_path.strip())
+    base_text = base_text.strip()
+    
+    try:
+        count = processor.bulk_rename_files(folder_path, base_text)
+        if os.path.exists(folder_path):
+            os.startfile(folder_path)
+        return jsonify({'success': True, 'message': f'Successfully renamed {count} files!'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

@@ -3,6 +3,7 @@ import glob
 import math
 import numpy as np
 from PIL import Image, ImageFilter
+Image.MAX_IMAGE_PIXELS = None
 import cv2
 from etsytools.paths import find_model_file
 
@@ -81,6 +82,35 @@ def crop_images(input_dir, output_dir, target_width, target_height):
         except Exception as e:
             pass
 
+def remove_connected_background_color(img_pil, tolerance=30):
+    img = img_pil.convert("RGBA")
+    np_img = np.array(img)
+    
+    h, w, c = np_img.shape
+    mask = np.zeros((h + 2, w + 2), dtype=np.uint8)
+    rgb_img = np_img[:, :, :3].copy()
+    
+    # We will perform flood fill from the 4 corners
+    corners = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+    for x, y in corners:
+        # Skip if this corner is already transparent in the original
+        if np_img[y, x, 3] == 0:
+            continue
+        cv2.floodFill(
+            rgb_img, 
+            mask, 
+            (x, y), 
+            newVal=(0, 255, 0), # Dummy fill color
+            loDiff=(tolerance, tolerance, tolerance), 
+            upDiff=(tolerance, tolerance, tolerance),
+            flags=4 | (255 << 8) | cv2.FLOODFILL_MASK_ONLY
+        )
+    
+    # Set alpha to 0 for all connected background pixels
+    bg_mask = mask[1:-1, 1:-1] == 255
+    np_img[bg_mask, 3] = 0
+    return Image.fromarray(np_img)
+
 def fastsam_remove_background(filepath):
     model = YOLO(str(find_model_file("FastSAM-s.pt")))
     results = model(filepath, retina_masks=True, conf=0.4)
@@ -109,7 +139,8 @@ def fastsam_remove_background(filepath):
     item_rgba = np_img.copy()
     item_rgba[:, :, 3] = np.minimum(item_rgba[:, :, 3], item_alpha)
     
-    return Image.fromarray(item_rgba)
+    res_img = Image.fromarray(item_rgba)
+    return remove_connected_background_color(res_img, tolerance=30)
 
 def remove_background(input_dir):
     output_dir = os.path.join(input_dir, "Results")
@@ -129,45 +160,79 @@ def remove_background(input_dir):
         except Exception as e:
             print(f"Failed processing {filepath}: {e}")
 
-def format_clipart_batch(input_dir):
+def format_clipart_batch(input_dir, target_width=3000, target_height=3000, target_dpi=300, remove_bg=True, use_upscaler=False, check_cancelled_fn=None):
     output_dir = os.path.join(input_dir, "Results")
     ensure_dir(output_dir)
     pattern = os.path.join(input_dir, "*.*")
     
     for filepath in glob.glob(pattern):
         if not os.path.isfile(filepath): continue
+        if check_cancelled_fn and check_cancelled_fn():
+            print("format_clipart_batch cancelled by callback. Terminating.")
+            import shutil
+            shutil.rmtree(output_dir, ignore_errors=True)
+            raise RuntimeError("Batch formatting cancelled by user.")
         try:
             print(f"Formatting {os.path.basename(filepath)}...")
             
-            img_nobg = fastsam_remove_background(filepath)
+            if remove_bg:
+                img_nobg = fastsam_remove_background(filepath)
+                bbox = img_nobg.getbbox()
+                if bbox:
+                    img_nobg = img_nobg.crop(bbox)
+            else:
+                img_nobg = Image.open(filepath).convert("RGBA")
             
-            bbox = img_nobg.getbbox()
-            if bbox:
-                img_nobg = img_nobg.crop(bbox)
-            
-            target_size = 3000
-            max_dim = 2850
             width, height = img_nobg.size
             
-            if width > height:
-                new_width = max_dim
-                new_height = int(height * (max_dim / width))
-            else:
-                new_height = max_dim
-                new_width = int(width * (max_dim / height))
+            # Setup RealESRGAN if image needs upscaling to prevent blurriness and use_upscaler is enabled
+            realesrgan_exe = None
+            if use_upscaler and (target_width > width or target_height > height):
+                try:
+                    realesrgan_exe = init_realesrgan()
+                except Exception:
+                    pass
+            
+            if realesrgan_exe is not None:
+                import subprocess
+                from uuid import uuid4
+                temp_in = os.path.join(output_dir, f"temp_{uuid4().hex}_in.png")
+                temp_out = os.path.join(output_dir, f"temp_{uuid4().hex}_out.png")
+                img_nobg.save(temp_in, "PNG")
+                try:
+                    # Using x4plus-anime for clean lines and faster processing speeds
+                    subprocess.run([realesrgan_exe, '-i', temp_in, '-o', temp_out, '-n', 'realesrgan-x4plus-anime', '-s', '4'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if os.path.exists(temp_out):
+                        img_nobg = Image.open(temp_out).convert("RGBA")
+                        width, height = img_nobg.size
+                except Exception as e:
+                    print(f"Real-ESRGAN upscale failed for batch item: {e}")
+                finally:
+                    if os.path.exists(temp_in): os.remove(temp_in)
+                    if os.path.exists(temp_out): os.remove(temp_out)
+            
+            if remove_bg:
+                # Scale to fit inside target size (leaving 5% margins for clipart)
+                max_target_w = int(target_width * 0.95)
+                max_target_h = int(target_height * 0.95)
+                scale = min(max_target_w / width, max_target_h / height)
+                new_width = int(width * scale)
+                new_height = int(height * scale)
                 
-            img_resized = img_nobg.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            
-            canvas = Image.new("RGBA", (target_size, target_size), (0, 0, 0, 0))
-            
-            paste_x = (target_size - new_width) // 2
-            paste_y = (target_size - new_height) // 2
-            
-            canvas.paste(img_resized, (paste_x, paste_y), img_resized)
+                img_resized = img_nobg.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                canvas = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 0))
+                
+                paste_x = (target_width - new_width) // 2
+                paste_y = (target_height - new_height) // 2
+                canvas.paste(img_resized, (paste_x, paste_y), img_resized)
+                output_image = canvas
+            else:
+                # Resize the image directly to the target dimensions
+                output_image = img_nobg.resize((target_width, target_height), Image.Resampling.LANCZOS)
             
             base_name = os.path.splitext(os.path.basename(filepath))[0]
             out_path = os.path.join(output_dir, f"{base_name}_clipart.png")
-            canvas.save(out_path, "PNG", dpi=(300, 300))
+            output_image.save(out_path, "PNG", dpi=(target_dpi, target_dpi))
             print(f"Saved formatted clipart: {out_path}")
             
         except Exception as e:
@@ -193,22 +258,12 @@ def init_realesrgan():
     
     return exe_path
 
-def auto_process_sheet(input_path, bg_type='transparent', canvas_color='transparent'):
+def auto_process_sheet(input_path, check_cancelled_fn=None):
     input_dir = os.path.dirname(os.path.abspath(input_path))
     output_dir = os.path.join(input_dir, "Split")
     ensure_dir(output_dir)
     
-    bg_color = (0, 0, 0, 0)
-    if canvas_color == 'black':
-        bg_color = (0, 0, 0, 255)
-    elif canvas_color == 'white':
-        bg_color = (255, 255, 255, 255)
-    elif canvas_color.startswith('#'):
-        h = canvas_color.lstrip('#')
-        if len(h) == 6:
-            bg_color = tuple(int(h[i:i+2], 16) for i in (0, 2, 4)) + (255,)
-    
-    print(f"Auto-processing sheet {os.path.basename(input_path)} using Heavy AI...")
+    print(f"Auto-processing sheet {os.path.basename(input_path)}...")
     
     try:
         from ultralytics import YOLO
@@ -236,16 +291,13 @@ def auto_process_sheet(input_path, bg_type='transparent', canvas_color='transpar
     
     print(f"Found {len(masks)} distinct items on the sheet using AI.")
     
-    realesrgan_exe = None
-    try:
-        realesrgan_exe = init_realesrgan()
-        print("RealESRGAN portable engine ready.")
-    except Exception as e:
-        print(f"Could not setup RealESRGAN engine: {e}. Will fallback to basic resizing.")
-    
-    import subprocess
-    
     for idx, (mask, box) in enumerate(zip(masks, boxes)):
+        if check_cancelled_fn and check_cancelled_fn():
+            print("auto_process_sheet cancelled by callback. Terminating.")
+            import shutil
+            shutil.rmtree(output_dir, ignore_errors=True)
+            raise RuntimeError("Splitting cancelled by user.")
+            
         x1, y1, x2, y2 = box
         
         if mask.shape != np_img.shape[:2]:
@@ -260,54 +312,26 @@ def auto_process_sheet(input_path, bg_type='transparent', canvas_color='transpar
         item_rgba[:, :, 3] = np.minimum(item_rgba[:, :, 3], item_alpha)
         
         item_crop = Image.fromarray(item_rgba).crop((x1, y1, x2, y2))
+        item_crop = remove_connected_background_color(item_crop, tolerance=30)
         
         bbox = item_crop.getbbox()
         if bbox:
+            # Skip noise crops that are extremely small (less than 10px wide or high)
+            x_w = bbox[2] - bbox[0]
+            y_h = bbox[3] - bbox[1]
+            if x_w < 10 or y_h < 10:
+                print(f"Skipping tiny noise item {idx+1}: size={x_w}x{y_h}")
+                continue
             item_crop = item_crop.crop(bbox)
-            
-        # Apply Portable RealESRGAN AI Upscaling
-        if realesrgan_exe is not None:
-            print(f"Upscaling item {idx+1} with Portable RealESRGAN...")
-            temp_in = os.path.join(output_dir, "temp_in.png")
-            temp_out = os.path.join(output_dir, "temp_out.png")
-            item_crop.save(temp_in, "PNG")
-            try:
-                subprocess.run([realesrgan_exe, '-i', temp_in, '-o', temp_out, '-n', 'realesrgan-x4plus', '-s', '4'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                if os.path.exists(temp_out):
-                    item_crop = Image.open(temp_out).convert("RGBA")
-                    os.remove(temp_out)
-                os.remove(temp_in)
-            except Exception as e:
-                print(f"Upscale failed for item {idx+1}: {e}")
-        
-        target_size = 3000
-        max_dim = 2850
-        width, height = item_crop.size
-        
-        if width > height:
-            new_width = max_dim
-            new_height = int(height * (max_dim / width))
         else:
-            new_height = max_dim
-            new_width = int(width * (max_dim / height))
+            print(f"Skipping empty transparent item {idx+1}")
+            continue
             
-        if new_width != width or new_height != height:
-            img_resized = item_crop.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        else:
-            img_resized = item_crop
-            
-        canvas = Image.new("RGBA", (target_size, target_size), bg_color)
-        
-        paste_x = (target_size - img_resized.width) // 2
-        paste_y = (target_size - img_resized.height) // 2
-        
-        canvas.paste(img_resized, (paste_x, paste_y), img_resized if img_resized.mode == 'RGBA' else None)
-        
         out_path = os.path.join(output_dir, f"{base_name}_{idx+1}.png")
-        canvas.save(out_path, "PNG", dpi=(300, 300))
+        item_crop.save(out_path, "PNG")
         print(f"Processed item {idx+1}: {out_path}")
         
-    print(f"All {len(masks)} items formatted into: {output_dir}")
+    print(f"All items formatted into: {output_dir}")
 
 
 def add_drop_shadow(image, offset=(15, 15), background_color=(0, 0, 0, 100), blur_radius=15):
@@ -558,3 +582,95 @@ def upscale_and_resize_general_image(input_path, target_width, target_height, ta
     # Save with custom DPI settings
     img_resized.save(output_path, "PNG", dpi=(target_dpi, target_dpi))
     print(f"Upscaled image successfully saved to: {output_path}")
+
+def resize_image_multiple_sizes(input_path, sizes, output_zip_path):
+    """
+    Resizes a single PNG image into multiple target dimensions (width, height)
+    using high-quality PIL Lanczos resampling (preserving resolution)
+    and packages them into a ZIP archive.
+    """
+    import zipfile
+    
+    img = Image.open(input_path)
+    
+    base_dir = os.path.dirname(output_zip_path)
+    temp_files = []
+    
+    base_name = os.path.splitext(os.path.basename(input_path))[0]
+    
+    try:
+        # Generate each resized version
+        for width, height in sizes:
+            # High-quality resize using LANCZOS
+            # To handle transparency correctly, keep mode as RGBA (or convert if needed)
+            if img.mode != 'RGBA':
+                resized_img = img.convert('RGBA')
+            else:
+                resized_img = img
+                
+            resized_img = resized_img.resize((width, height), Image.Resampling.LANCZOS)
+            
+            # Save the resized image
+            out_filename = f"{base_name}_{width}x{height}.png"
+            out_path = os.path.join(base_dir, out_filename)
+            
+            # Save with 300 DPI by default to preserve print-ready resolution
+            resized_img.save(out_path, "PNG", dpi=(300, 300))
+            temp_files.append((out_path, out_filename))
+            print(f"Resized image to {width}x{height} and saved to {out_path}")
+            
+        # Create ZIP file
+        with zipfile.ZipFile(output_zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for file_path, arc_name in temp_files:
+                zip_file.write(file_path, arc_name)
+                
+    finally:
+        # Clean up the individual files as they are now zipped
+        for file_path, _ in temp_files:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    print(f"Could not clean up temporary file {file_path}: {e}")
+
+def bulk_rename_files(folder_path, base_text):
+    """
+    Sequentially renames all files in a folder using the format:
+    XX_base_text.ext (where XX is padded 01, 02, etc.)
+    Returns the total number of files renamed.
+    """
+    if not os.path.exists(folder_path):
+        raise FileNotFoundError(f"Folder path does not exist: {folder_path}")
+    if not os.path.isdir(folder_path):
+        raise NotADirectoryError(f"Path is not a directory: {folder_path}")
+        
+    files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
+    # Filter out hidden or system files
+    files = [f for f in files if not f.startswith('.') and f.lower() not in ('desktop.ini', 'thumbs.db')]
+    
+    total_files = len(files)
+    if total_files == 0:
+        return 0
+        
+    files.sort()
+    padding_len = max(2, len(str(total_files)))
+    
+    # Pass 1: Rename files to unique temporary names to prevent collisions
+    temp_renames = []
+    import uuid
+    for filename in files:
+        old_path = os.path.join(folder_path, filename)
+        ext = os.path.splitext(filename)[1]
+        temp_name = f"temp_{uuid.uuid4().hex}{ext}"
+        temp_path = os.path.join(folder_path, temp_name)
+        os.rename(old_path, temp_path)
+        temp_renames.append((temp_path, ext))
+        
+    # Pass 2: Rename temporary files to sequential names
+    for i, (temp_path, ext) in enumerate(temp_renames):
+        num_str = f"{i+1:0{padding_len}d}"
+        new_filename = f"{num_str}_{base_text}{ext}"
+        new_path = os.path.join(folder_path, new_filename)
+        os.rename(temp_path, new_path)
+        
+    return total_files

@@ -20,11 +20,14 @@
                 <button class="nav-btn active" data-target="auto-process">
                     <span class="icon">🪄</span> Auto Process
                 </button>
-                <button class="nav-btn" data-target="mockup-showcase">
-                    <span class="icon">🖼️</span> Mockup Showcase
+                <button class="nav-btn" data-target="image-resizer">
+                    <span class="icon">📏</span> Image Resizer
                 </button>
                 <button class="nav-btn" data-target="format-clipart">
                     <span class="icon">✂️</span> Format Clipart
+                </button>
+                <button class="nav-btn" data-target="bulk-renamer">
+                    <span class="icon">🏷️</span> Bulk Renamer
                 </button>
             </nav>
         </aside>
@@ -67,23 +70,28 @@
                     </div>
                 </div>
 
-                <!-- Mockup Showcase View -->
-                <div id="mockup-showcase" class="view">
-                    <div class="drop-zone" id="drop-mockup-clipart">
-                        <div class="drop-icon">🎨</div>
-                        <h3>Drag & Drop Clipart Folder Here</h3>
-                        <p>Select multiple freshly cut pieces</p>
-                        <input type="file" id="file-mockup-clipart" webkitdirectory directory multiple hidden>
+                <!-- Image Resizer View -->
+                <div id="image-resizer" class="view">
+                    <div style="display: flex; gap: 20px; align-items: stretch; margin-bottom: 20px; max-width: 600px;">
+                        <div class="drop-zone" id="drop-resize-image" style="flex: 1; height: 120px; margin-bottom: 0; flex-direction: column; justify-content: center;">
+                            <div class="drop-icon" style="font-size: 28px; margin-bottom: 8px;">📏</div>
+                            <h3 style="font-size: 15px; margin-bottom: 0;">Drag & Drop PNG Here</h3>
+                            <input type="file" id="file-resize-image" accept="image/png" hidden>
+                        </div>
+                        <button type="button" class="primary-btn" id="btn-run-resize" style="width: auto; padding: 0 24px; margin: 0; white-space: nowrap; border-radius: 20px; height: 120px; font-size: 16px; font-weight: 600;">Resize & ZIP</button>
                     </div>
-                    
-                    <div class="drop-zone" id="drop-mockup-bg" style="margin-top: 20px;">
-                        <div class="drop-icon">🌅</div>
-                        <h3>Drag Background Template Here (Optional)</h3>
-                        <p>Leave blank to auto-generate one</p>
-                        <input type="file" id="file-mockup-bg" accept="image/*" hidden>
+
+                    <div class="settings-panel" style="margin-bottom: 20px; max-width: 600px;">
+                        <h4 style="margin-bottom: 12px; font-weight: 600; font-size: 15px;">Output Dimensions (up to 5 sizes)</h4>
+                        <div id="dimension-rows-container">
+                            <div class="dimension-row">
+                                <input type="number" class="dim-width" placeholder="Width (px)" required min="1">
+                                <span class="dim-separator">×</span>
+                                <input type="number" class="dim-height" placeholder="Height (px)" required min="1">
+                                <button type="button" class="add-dim-btn" title="Add another size">+</button>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <button class="primary-btn" id="btn-run-mockup" style="margin-top: 20px;">Generate Mockup</button>
                 </div>
 
                 <!-- Format Clipart View -->
@@ -93,7 +101,22 @@
                         <h3>Drag & Drop Clipart Folder Here</h3>
                         <p>Removes background and pads all files in folder</p>
                         <input type="file" id="file-format-clipart" webkitdirectory directory multiple hidden>
+                </div>
+
+                <!-- Bulk Renamer View -->
+                <div id="bulk-renamer" class="view">
+                    <div class="settings-panel" style="margin-bottom: 20px; max-width: 600px; display: flex; flex-direction: column; gap: 15px;">
+                        <div>
+                            <label for="rename-folder-path" style="font-weight: 500; display: block; margin-bottom: 8px;">Local Folder Path:</label>
+                            <input type="text" id="rename-folder-path" placeholder="e.g. C:\Users\Username\Pictures\Designs" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 14px; outline: none;">
+                        </div>
+                        <div>
+                            <label for="rename-base-text" style="font-weight: 500; display: block; margin-bottom: 8px;">Base Rename Text:</label>
+                            <input type="text" id="rename-base-text" placeholder="e.g. butterfly_tattoo" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 14px; outline: none;">
+                        </div>
                     </div>
+                    
+                    <button class="primary-btn" id="btn-run-rename">Rename Files</button>
                 </div>
             </div>
 

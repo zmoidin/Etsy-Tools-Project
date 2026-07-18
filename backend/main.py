@@ -8,7 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -24,6 +24,9 @@ IMAGE_ASSIST_DIR = str(PROJECT_ROOT / "ImageAssist")
 if IMAGE_ASSIST_DIR not in sys.path:
     sys.path.append(IMAGE_ASSIST_DIR)
 import processor
+
+active_splitter_jobs = {}
+active_batch_jobs = {}
 
 try:
     from google import genai
@@ -58,9 +61,10 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.mount("/runtime", StaticFiles(directory=str(RUNTIME_DIR)), name="runtime")
 
-    config = analyzer.load_config()
-    products = config.get("products", {})
-    digital_formats = config.get("digital_formats", {})
+    def get_config():
+        conf = analyzer.load_config()
+        return conf.get("products", {}), conf.get("digital_formats", {})
+
     settings = load_environment()
 
     def get_upload_path(image_id: str) -> Path | None:
@@ -81,6 +85,7 @@ def create_app() -> FastAPI:
         listing: dict | None = None,
         error: str | None = None,
     ) -> HTMLResponse:
+        products, digital_formats = get_config()
         selected_format = selected_format or (list(digital_formats.keys())[0] if digital_formats else "")
         selected_targets = selected_targets or []
         image_url = f"/runtime/uploads/{image_id}" if image_id else None
@@ -115,6 +120,7 @@ def create_app() -> FastAPI:
         *,
         active_tool: str = "splitter",
         error: str | None = None,
+        success_msg: str | None = None,
         zip_url: str | None = None,
         split_images: list[str] | None = None,
         formatted_images: list[str] | None = None,
@@ -128,11 +134,30 @@ def create_app() -> FastAPI:
                 "active_page": "image_assist",
                 "active_tool": active_tool,
                 "error": error,
+                "success_msg": success_msg,
                 "zip_url": zip_url,
                 "split_images": split_images,
                 "formatted_images": formatted_images,
                 "collage_url": collage_url,
                 "upscaled_url": upscaled_url,
+                "gemini_connected": bool(settings.gemini_api_key and settings.gemini_api_key != "your_gemini_api_key_here"),
+                "tavily_connected": bool(settings.tavily_api_key and settings.tavily_api_key != "your_tavily_api_key_here"),
+            },
+        )
+
+    def render_bulk_renamer(
+        request: Request,
+        *,
+        error: str | None = None,
+        success_msg: str | None = None,
+    ) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "bulk_renamer.html",
+            {
+                "active_page": "bulk_renamer",
+                "error": error,
+                "success_msg": success_msg,
                 "gemini_connected": bool(settings.gemini_api_key and settings.gemini_api_key != "your_gemini_api_key_here"),
                 "tavily_connected": bool(settings.tavily_api_key and settings.tavily_api_key != "your_tavily_api_key_here"),
             },
@@ -216,6 +241,7 @@ def create_app() -> FastAPI:
         seo_keywords: str = Form(None),
         image_id: str = Form(...),
     ):
+        products, digital_formats = get_config()
         target_list = targets or []
         kw_str = seo_keywords.strip() if seo_keywords else ""
         image_path = get_upload_path(image_id)
@@ -290,21 +316,29 @@ def create_app() -> FastAPI:
 
     @app.get("/image-assist", response_class=HTMLResponse)
     async def image_assist_page(request: Request, tool: str = "splitter"):
-        if tool not in {"splitter", "batch", "collage", "upscaler"}:
+        if tool not in {"splitter", "batch", "resizer", "upscaler"}:
             tool = "splitter"
         return render_image_assist(request, active_tool=tool)
+
+    @app.post("/image-assist/splitter/cancel/{session_id}")
+    async def cancel_splitter(session_id: str):
+        print(f"Cancelling active sheet splitter job: {session_id}")
+        active_splitter_jobs[session_id] = "cancelled"
+        return {"status": "cancelled"}
 
     @app.post("/image-assist/splitter", response_class=HTMLResponse)
     async def run_splitter(
         request: Request,
         sheet: UploadFile = File(...),
-        canvas_color: str = Form(...),
-        custom_hex: str = Form(None),
+        session_id: str = None,  # Optional query parameter
     ):
         if not sheet.filename:
             return render_image_assist(request, active_tool="splitter", error="Please upload a sheet image.")
 
         temp_id = uuid4().hex
+        job_id = session_id if session_id else temp_id
+        active_splitter_jobs[job_id] = "running"
+
         session_dir = OUTPUT_DIR / f"splitter_{temp_id}"
         session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -312,12 +346,23 @@ def create_app() -> FastAPI:
         data = await sheet.read()
         sheet_path.write_bytes(data)
 
-        bg_color_arg = canvas_color
-        if canvas_color == "custom hex" and custom_hex:
-            bg_color_arg = custom_hex
+        try:
+            def check_cancelled():
+                return active_splitter_jobs.get(job_id) == "cancelled"
+
+            processor.auto_process_sheet(
+                str(sheet_path),
+                check_cancelled_fn=check_cancelled
+            )
+        except Exception as e:
+            # Clean up the output directory on failure or cancellation
+            import shutil
+            shutil.rmtree(session_dir, ignore_errors=True)
+            return render_image_assist(request, active_tool="splitter", error=f"Error processing sheet: {str(e)}")
+        finally:
+            active_splitter_jobs.pop(job_id, None)
 
         try:
-            processor.auto_process_sheet(str(sheet_path), bg_type="transparent", canvas_color=bg_color_arg)
 
             split_dir = session_dir / "Split"
             split_files = list(split_dir.glob("*.png"))
@@ -344,16 +389,37 @@ def create_app() -> FastAPI:
         except Exception as e:
             return render_image_assist(request, active_tool="splitter", error=f"Error processing sheet: {str(e)}")
 
+    @app.post("/image-assist/batch/cancel/{session_id}")
+    async def cancel_batch(session_id: str):
+        print(f"Cancelling active batch formatting job: {session_id}")
+        active_batch_jobs[session_id] = "cancelled"
+        return {"status": "cancelled"}
+
     @app.post("/image-assist/batch", response_class=HTMLResponse)
     async def run_batch_formatter(
         request: Request,
         files: list[UploadFile] = File(...),
+        width: int = Form(...),
+        height: int = Form(...),
+        dpi: int = Form(...),
+        remove_bg: str = Form(None),
+        use_upscaler: str = Form(None),
+        session_id: str = None,  # Optional query parameter
     ):
         files = [f for f in files if f.filename]
         if not files:
             return render_image_assist(request, active_tool="batch", error="Please upload one or more files.")
 
+        if width <= 0 or height <= 0 or dpi <= 0:
+            return render_image_assist(request, active_tool="batch", error="Width, height, and DPI must be positive integers.")
+
+        should_remove_bg = (remove_bg == "true")
+        should_upscale = (use_upscaler == "true")
+
         temp_id = uuid4().hex
+        job_id = session_id if session_id else temp_id
+        active_batch_jobs[job_id] = "running"
+
         session_dir = OUTPUT_DIR / f"batch_{temp_id}"
         session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -363,7 +429,18 @@ def create_app() -> FastAPI:
             fpath.write_bytes(data)
 
         try:
-            processor.format_clipart_batch(str(session_dir))
+            def check_cancelled():
+                return active_batch_jobs.get(job_id) == "cancelled"
+
+            processor.format_clipart_batch(
+                str(session_dir),
+                target_width=width,
+                target_height=height,
+                target_dpi=dpi,
+                remove_bg=should_remove_bg,
+                use_upscaler=should_upscale,
+                check_cancelled_fn=check_cancelled
+            )
 
             results_dir = session_dir / "Results"
             result_files = list(results_dir.glob("*.png"))
@@ -388,53 +465,86 @@ def create_app() -> FastAPI:
 
             return render_image_assist(request, active_tool="batch", zip_url=zip_url, formatted_images=formatted_urls)
         except Exception as e:
+            import shutil
+            shutil.rmtree(session_dir, ignore_errors=True)
             return render_image_assist(request, active_tool="batch", error=f"Error in batch processing: {str(e)}")
+        finally:
+            active_batch_jobs.pop(job_id, None)
 
-    @app.post("/image-assist/collage", response_class=HTMLResponse)
-    async def run_collage(
+    @app.post("/image-assist/resizer")
+    async def run_resizer(
         request: Request,
-        cliparts: list[UploadFile] = File(...),
-        background: UploadFile = File(None),
+        file: UploadFile = File(...),
+        widths: list[str] = Form(...),
+        heights: list[str] = Form(...),
     ):
-        cliparts = [c for c in cliparts if c.filename]
-        if not cliparts:
-            return render_image_assist(request, active_tool="collage", error="Please upload clipart files to arrange.")
+        if not file.filename:
+            return render_image_assist(request, active_tool="resizer", error="Please upload a PNG file.")
 
-        temp_id = uuid4().hex
-        session_dir = OUTPUT_DIR / f"collage_{temp_id}"
-        clipart_dir = session_dir / "Clipart"
-        clipart_dir.mkdir(parents=True, exist_ok=True)
-
-        for c in cliparts:
-            fpath = clipart_dir / Path(c.filename).name
-            data = await c.read()
-            fpath.write_bytes(data)
-
-        bg_path = None
-        if background and background.filename:
-            bg_path = session_dir / Path(background.filename).name
-            data = await background.read()
-            bg_path.write_bytes(data)
+        if not widths or not heights or len(widths) != len(heights):
+            return render_image_assist(request, active_tool="resizer", error="Invalid dimensions specified.")
 
         try:
-            output_showcase_path = session_dir / "Bundle_Showcase.png"
-            processor.create_showcase_mockup(
-                str(clipart_dir),
-                str(bg_path) if bg_path else None,
-                output_path=str(output_showcase_path),
+            sizes = []
+            for w, h in zip(widths, heights):
+                sizes.append((int(w), int(h)))
+        except ValueError:
+            return render_image_assist(request, active_tool="resizer", error="Dimensions must be integers.")
+
+        temp_id = uuid4().hex
+        session_dir = OUTPUT_DIR / f"resizer_{temp_id}"
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        input_path = session_dir / Path(file.filename).name
+        data = await file.read()
+        input_path.write_bytes(data)
+
+        base_name = Path(file.filename).stem
+        zip_filename = f"{base_name}_resized.zip"
+        zip_path = session_dir / zip_filename
+
+        try:
+            processor.resize_image_multiple_sizes(str(input_path), sizes, str(zip_path))
+            
+            # Open directory for local users
+            if session_dir.exists():
+                os.startfile(str(session_dir))
+
+            zip_url = f"/runtime/outputs/resizer_{temp_id}/{zip_filename}"
+            return render_image_assist(
+                request,
+                active_tool="resizer",
+                zip_url=zip_url,
+                success_msg="Successfully resized images! Use the button below to download the ZIP."
             )
-
-            if not output_showcase_path.exists():
-                return render_image_assist(
-                    request,
-                    active_tool="collage",
-                    error="Failed to generate showcase collage image.",
-                )
-
-            collage_url = f"/runtime/outputs/collage_{temp_id}/Bundle_Showcase.png"
-            return render_image_assist(request, active_tool="collage", collage_url=collage_url)
         except Exception as e:
-            return render_image_assist(request, active_tool="collage", error=f"Error generating collage: {str(e)}")
+            return render_image_assist(request, active_tool="resizer", error=f"Error resizing image: {str(e)}")
+
+    @app.get("/bulk-renamer", response_class=HTMLResponse)
+    async def bulk_renamer_page(request: Request):
+        return render_bulk_renamer(request)
+
+    @app.post("/bulk-renamer", response_class=HTMLResponse)
+    async def run_bulk_renamer(
+        request: Request,
+        folder_path: str = Form(...),
+        base_text: str = Form(...),
+    ):
+        if not folder_path or not base_text:
+            return render_bulk_renamer(request, error="Folder path and base text are required.")
+
+        folder_path = folder_path.strip()
+        base_text = base_text.strip()
+
+        try:
+            count = processor.bulk_rename_files(folder_path, base_text)
+            if os.path.exists(folder_path):
+                os.startfile(folder_path)
+            
+            success_msg = f"Successfully renamed {count} files in '{folder_path}'!"
+            return render_bulk_renamer(request, success_msg=success_msg)
+        except Exception as e:
+            return render_bulk_renamer(request, error=f"Error renaming files: {str(e)}")
 
     @app.post("/image-assist/upscaler", response_class=HTMLResponse)
     async def run_custom_upscaler(

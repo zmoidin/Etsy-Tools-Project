@@ -11,7 +11,7 @@ Write-Host "=========================================" -ForegroundColor Green
 Write-Host "Navigating to project directory..." -ForegroundColor Gray
 
 # 3. Navigate to workspace
-Set-Location -Path "c:\QuillSketch\EtsyTools"
+Set-Location -Path $PSScriptRoot
 
 # 4. Check if virtual environment exists
 if (Test-Path ".\.venv\Scripts\python.exe") {
@@ -19,4 +19,5 @@ if (Test-Path ".\.venv\Scripts\python.exe") {
     & ".\.venv\Scripts\python.exe" -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 } else {
     Write-Error "Could not find .venv Python. Install dependencies first, then rerun this script."
+    exit 1
 }

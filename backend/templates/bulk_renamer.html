@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk Renamer - EtsyTools Studio{% endblock %}
+
+{% block content %}
+  <section class="page-hero">
+    <h1>Bulk Renamer</h1>
+    <p>Sequentially rename all design files in a local folder with a custom base text prefix.</p>
+  </section>
+
+  {% if error %}
+    <div class="alert warning">{{ error }}</div>
+  {% endif %}
+
+  {% if success_msg %}
+    <div class="alert success" style="background: #d1fae5; border: 1px solid #10b981; color: #065f46; padding: 12px 16px; border-radius: 8px; font-weight: 500; margin-bottom: 20px;">{{ success_msg }}</div>
+  {% endif %}
+
+  <!-- Top Card: Inputs -->
+  <div class="card" style="margin-bottom: 22px;">
+    <form action="/bulk-renamer" method="post" class="form-stack">
+      <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; width: 100%;">
+        <div style="flex: 2; min-width: 250px;">
+          <label style="margin: 0;">
+            <span style="display: block; margin-bottom: 6px; font-weight: 500;">Local Folder Path</span>
+            <input type="text" name="folder_path" placeholder="e.g. C:\Users\Username\Pictures\Designs" required style="padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 14px; outline: none; width: 100%;" />
+          </label>
+        </div>
+
+        <div style="flex: 1; min-width: 180px;">
+          <label style="margin: 0;">
+            <span style="display: block; margin-bottom: 6px; font-weight: 500;">Base Rename Text</span>
+            <input type="text" name="base_text" placeholder="e.g. butterfly_tattoo" required style="padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 14px; outline: none; width: 100%;" />
+          </label>
+        </div>
+
+        <div style="flex-shrink: 0; margin-bottom: 2px;">
+          <button type="submit" class="primary-btn" data-loading-msg="Renaming files..." style="height: 38px; margin: 0; padding: 10px 20px; white-space: nowrap;">Rename Files</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Bottom Card: Info -->
+  <div class="card">
+    <div class="empty-state" style="min-height: 250px;">
+      <strong>Bulk Renamer Tool</strong>
+      <span>Provide a local folder path and base text, and click 'Rename Files' to sequentially rename all files in that folder.</span>
+    </div>
+  </div>
+{% endblock %}

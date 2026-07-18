@@ -3,7 +3,7 @@
 # Standard Etsy product definitions for artwork validation
 products:
   tshirt:
-    name: "T-Shirt"
+    name: "Adult T-Shirt"
     width: 4600
     height: 5000
     dpi: 300
@@ -32,18 +32,49 @@ products:
     height: 7200
     dpi: 300
     description: "High-resolution digital printable art files for home decor prints (300 DPI)"
-  clipart_item:
-    name: "Clipart Item"
+  toddler_tshirt:
+    name: "Toddler T-Shirt"
+    width: 2400
+    height: 3000
+    dpi: 300
+    description: "Toddler T-shirt print area (2400x3000 at 300 DPI)"
+  phone_wallpaper:
+    name: "Phone Wallpaper"
+    width: 2160
+    height: 4800
+    dpi: 300
+    description: "High-resolution phone wallpaper (2160x4800 at 300 DPI)"
+  clipart_normal:
+    name: "Clipart (Normal)"
     width: 3000
     height: 3000
     dpi: 300
-    description: "Individual transparent clipart elements in a bundle (300 DPI)"
+    description: "Standard transparent clipart element (3000x3000 at 300 DPI)"
+  clipart_large:
+    name: "Clipart (Large)"
+    width: 5000
+    height: 5000
+    dpi: 300
+    description: "Large transparent clipart element (5000x5000 at 300 DPI)"
+  sticker:
+    name: "Car Sticker (6x6)"
+    width: 1800
+    height: 1800
+    dpi: 300
+    description: "Car sticker print area (1800x1800 pixels at 300 DPI)"
+  tattoo:
+    name: "Tattoo"
+    width: 2400
+    height: 3600
+    dpi: 300
+    description: "Master tattoo design (2400x3600 px at 300 DPI)"
 
 digital_formats:
   sublimation_png: "Single PNG Sublimation Design"
   clipart_bundle: "Clipart Pack / PNG Bundle"
   seamless_pattern: "Seamless Pattern / Digital Paper"
   digital_art: "Digital Wall Art Poster"
+  artwork_design: "Artwork / Design"
 
 # Design parameters for programmatically generated infographics
 infographics:
@@ -82,4 +113,28 @@ mockup_overlay_defaults:
   tote_bag:
     center_x: 0.50
     center_y: 0.52
+    width_fraction: 0.40
+  toddler_tshirt:
+    center_x: 0.50
+    center_y: 0.45
+    width_fraction: 0.35
+  phone_wallpaper:
+    center_x: 0.50
+    center_y: 0.50
+    width_fraction: 0.45
+  clipart_normal:
+    center_x: 0.50
+    center_y: 0.50
+    width_fraction: 0.40
+  clipart_large:
+    center_x: 0.50
+    center_y: 0.50
+    width_fraction: 0.40
+  sticker:
+    center_x: 0.50
+    center_y: 0.50
+    width_fraction: 0.40
+  tattoo:
+    center_x: 0.50
+    center_y: 0.50
     width_fraction: 0.40

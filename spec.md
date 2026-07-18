@@ -38,7 +38,7 @@ The workspace implements a custom theme styled as a clean SaaS interface:
 *   **Layout Behavior**: Side navigation drawer (width `280px`) with transition effects. The collapse control button `Collapse sidebar` in the footer collapses the sidebar to the left. The `Show sidebar` button in the main content restores it.
 *   **Workspace Navigation**: Consolidated down to **three core tools** styled under a brand title `EtsyTools Studio`:
     *   `Listing Wizard` (Step-by-step listing compositor)
-    *   `Image Assist` (Clipart sheet splitter, batch background removal/formatting, and bundle showcase grid generator)
+    *   `Image Assist` (Clipart sheet splitter, batch background removal/formatting, and multi-size image resizer)
     *   `Trend Research` (Tavily search trends analyzer and clipart prompt builder)
 *   **Active Tab**: Styled with a soft blue background (`var(--blue-soft)`) and blue text (`var(--blue)`), border-color matching `#dbeafe`.
 

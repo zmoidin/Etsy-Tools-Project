@@ -105,15 +105,28 @@ def analyze_artwork(image_path, target_product_keys=None):
                 result["recommendations"].append(f"DPI is too low for the selected targets ({product_names_str}). Resave artwork with 300 DPI settings.")
                 
             # Dimensions Check
-            dim_ok = (result["width"] >= target_w) and (result["height"] >= target_h)
-            result["checks"]["dimensions"] = {
-                "ok": dim_ok,
-                "current": f"{result['width']}x{result['height']}",
-                "required": f"{target_w}x{target_h}",
-                "label": f"Dimensions Check (Has {result['width']}x{result['height']}, Needs at least {target_w}x{target_h})"
-            }
-            if not dim_ok:
-                result["recommendations"].append(f"Image dimensions ({result['width']}x{result['height']} px) are smaller than the required maximum size ({target_w}x{target_h} px) for targeted products ({product_names_str}). Printing may cause blurriness.")
+            target_longest_side = max((products[k].get("longest_side", 0) for k in valid_keys), default=0)
+            if target_longest_side > 0:
+                actual_longest = max(result["width"], result["height"])
+                dim_ok = (actual_longest >= target_longest_side)
+                result["checks"]["dimensions"] = {
+                    "ok": dim_ok,
+                    "current": f"Longest side: {actual_longest}px",
+                    "required": f"Longest side: {target_longest_side}px",
+                    "label": f"Dimensions Check (Longest side is {actual_longest}px, Needs at least {target_longest_side}px)"
+                }
+                if not dim_ok:
+                    result["recommendations"].append(f"Image longest side ({actual_longest} px) is smaller than the required {target_longest_side} px for the selected targets ({product_names_str}).")
+            else:
+                dim_ok = (result["width"] >= target_w) and (result["height"] >= target_h)
+                result["checks"]["dimensions"] = {
+                    "ok": dim_ok,
+                    "current": f"{result['width']}x{result['height']}",
+                    "required": f"{target_w}x{target_h}",
+                    "label": f"Dimensions Check (Has {result['width']}x{result['height']}, Needs at least {target_w}x{target_h})"
+                }
+                if not dim_ok:
+                    result["recommendations"].append(f"Image dimensions ({result['width']}x{result['height']} px) are smaller than the required maximum size ({target_w}x{target_h} px) for targeted products ({product_names_str}). Printing may cause blurriness.")
             
             # Aspect Ratio Check (matches at least one checked template)
             ratio_ok = False
