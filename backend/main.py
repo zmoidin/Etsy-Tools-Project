@@ -382,6 +382,10 @@ def create_app() -> FastAPI:
                 for fpath in split_files:
                     zf.write(fpath, arcname=fpath.name)
 
+            # Open the output folder for local users
+            if OUTPUT_DIR.exists():
+                os.startfile(str(OUTPUT_DIR))
+
             split_urls = [f"/runtime/outputs/splitter_{temp_id}/Split/{fpath.name}" for fpath in split_files]
             zip_url = f"/runtime/outputs/{zip_name}"
 
@@ -459,6 +463,10 @@ def create_app() -> FastAPI:
             with zipfile.ZipFile(zip_path, "w") as zf:
                 for fpath in result_files:
                     zf.write(fpath, arcname=fpath.name)
+
+            # Open the output folder for local users
+            if OUTPUT_DIR.exists():
+                os.startfile(str(OUTPUT_DIR))
 
             formatted_urls = [f"/runtime/outputs/batch_{temp_id}/Results/{fpath.name}" for fpath in result_files]
             zip_url = f"/runtime/outputs/{zip_name}"
