@@ -95,12 +95,12 @@
 
     {% elif active_tool == 'resizer' %}
       <form action="/image-assist/resizer" method="post" enctype="multipart/form-data" class="form-stack">
-        <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 600px;">
+        <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 680px;">
           <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;">
             <div style="flex: 1; min-width: 200px;">
               <label style="margin: 0;">
                 <span style="display: block; margin-bottom: 6px; font-weight: 500;">Select target PNG image</span>
-                <input type="file" name="file" accept="image/png" required style="padding: 8px;" />
+              <input id="resizerFileInput" type="file" name="file" accept="image/png" required style="padding: 8px;" />
               </label>
             </div>
             <div>
@@ -109,7 +109,13 @@
           </div>
 
           <div>
-            <span style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">Output Dimensions (up to 5 sizes)</span>
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px; flex-wrap: wrap;">
+              <span style="font-weight: 600; font-size: 14px;">Output Dimensions (up to 5 sizes)</span>
+              <label id="resizerLockLabel" style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; margin: 0;">
+                <input id="resizerLockRatio" type="checkbox" style="width: 15px; height: 15px; accent-color: var(--blue);" />
+                <span>Lock aspect ratio</span>
+              </label>
+            </div>
             <div id="dimensionRowsContainerFastAPI">
               <div class="dimension-row-fastapi" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
                 <input type="number" name="widths" placeholder="Width (px)" required min="1" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); width: 120px;" />
@@ -127,21 +133,21 @@
           <div style="flex: 2; min-width: 220px;">
             <label style="margin: 0;">
               <span style="margin-bottom: 4px;">Target image</span>
-              <input type="file" name="image" accept="image/png, image/jpeg, image/jpg, image/webp" required style="padding: 8px;" />
+              <input id="upscalerFileInput" type="file" name="image" accept="image/png, image/jpeg, image/jpg, image/webp" required style="padding: 8px;" />
             </label>
           </div>
 
           <div style="flex: 1; min-width: 110px;">
             <label style="margin: 0;">
               <span style="margin-bottom: 4px;">Width (px)</span>
-              <input type="number" name="width" value="3000" min="100" max="10000" required style="padding: 8px 12px;" />
+              <input id="upscalerWidth" type="number" name="width" placeholder="auto" min="100" max="10000" required style="padding: 8px 12px;" />
             </label>
           </div>
 
           <div style="flex: 1; min-width: 110px;">
             <label style="margin: 0;">
               <span style="margin-bottom: 4px;">Height (px)</span>
-              <input type="number" name="height" value="3000" min="100" max="10000" required style="padding: 8px 12px;" />
+              <input id="upscalerHeight" type="number" name="height" placeholder="auto" min="100" max="10000" required style="padding: 8px 12px;" />
             </label>
           </div>
 
@@ -149,6 +155,13 @@
             <label style="margin: 0;">
               <span style="margin-bottom: 4px;">DPI</span>
               <input type="number" name="dpi" value="300" min="72" max="1200" required style="padding: 8px 12px;" />
+            </label>
+          </div>
+
+          <div style="flex-shrink: 0; min-width: 130px; display: flex; align-items: center; height: 38px; margin-bottom: 2px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; margin: 0;">
+              <input id="upscalerLockRatio" type="checkbox" style="width: 16px; height: 16px; accent-color: var(--blue);" />
+              <span>Lock aspect ratio</span>
             </label>
           </div>
 
@@ -435,6 +448,122 @@
           });
         }
       }
+      // Helper: read an image file and return { w, h } via Promise
+      function readImageDimensions(file) {
+        return new Promise((resolve) => {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve({ w: img.naturalWidth, h: img.naturalHeight });
+          };
+          img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+          img.src = url;
+        });
+      }
+
+      // Helper: attach live aspect-ratio lock to a pair of inputs + checkbox
+      function attachAspectLock(wInput, hInput, lockChk) {
+        // ratio is always derived from the current field values when lock is active
+        const getLockedRatio = () => {
+          const w = parseFloat(wInput.value);
+          const h = parseFloat(hInput.value);
+          return (w > 0 && h > 0) ? w / h : null;
+        };
+
+        let ratio = null;
+
+        // Snap ratio whenever the lock checkbox is toggled on
+        lockChk.addEventListener('change', () => {
+          if (lockChk.checked) ratio = getLockedRatio();
+        });
+
+        wInput.addEventListener('input', () => {
+          if (!lockChk.checked) return;
+          if (ratio === null) ratio = getLockedRatio();
+          const w = parseFloat(wInput.value);
+          if (w > 0 && ratio) hInput.value = Math.round(w / ratio);
+        });
+
+        hInput.addEventListener('input', () => {
+          if (!lockChk.checked) return;
+          if (ratio === null) ratio = getLockedRatio();
+          const h = parseFloat(hInput.value);
+          if (h > 0 && ratio) wInput.value = Math.round(h * ratio);
+        });
+
+        // Return a setter so callers can inject dimensions from an image
+        return {
+          setDimensions(w, h) {
+            wInput.value = w;
+            hInput.value = h;
+            ratio = w / h;
+            lockChk.checked = true;
+          }
+        };
+      }
+
+      // 4. Custom Upscaler — load image dims on file change
+      const upscalerWidth  = document.getElementById('upscalerWidth');
+      const upscalerHeight = document.getElementById('upscalerHeight');
+      const upscalerLock   = document.getElementById('upscalerLockRatio');
+      const upscalerFile   = document.getElementById('upscalerFileInput');
+      if (upscalerWidth && upscalerHeight && upscalerLock) {
+        const upscalerLockCtrl = attachAspectLock(upscalerWidth, upscalerHeight, upscalerLock);
+        if (upscalerFile) {
+          upscalerFile.addEventListener('change', async () => {
+            if (!upscalerFile.files || upscalerFile.files.length === 0) return;
+            const dims = await readImageDimensions(upscalerFile.files[0]);
+            if (dims) upscalerLockCtrl.setDimensions(dims.w, dims.h);
+          });
+        }
+      }
+
+      // 6. Image Resizer — load image dims into first row on file change
+      const resizerLockChk = document.getElementById('resizerLockRatio');
+      const resizerFile    = document.getElementById('resizerFileInput');
+      if (resizerLockChk && containerFastAPI) {
+        // per-row listeners (attaches lock behaviour to each W/H pair)
+        const attachResizerRowListeners = (row) => {
+          const wInput = row.querySelector('input[name="widths"]');
+          const hInput = row.querySelector('input[name="heights"]');
+          if (!wInput || !hInput) return;
+          attachAspectLock(wInput, hInput, resizerLockChk);
+        };
+
+        containerFastAPI.querySelectorAll('.dimension-row-fastapi').forEach(attachResizerRowListeners);
+
+        // Auto-populate first row when file selected
+        if (resizerFile) {
+          resizerFile.addEventListener('change', async () => {
+            if (!resizerFile.files || resizerFile.files.length === 0) return;
+            const dims = await readImageDimensions(resizerFile.files[0]);
+            if (!dims) return;
+            const firstRow = containerFastAPI.querySelector('.dimension-row-fastapi');
+            if (!firstRow) return;
+            const wInput = firstRow.querySelector('input[name="widths"]');
+            const hInput = firstRow.querySelector('input[name="heights"]');
+            if (wInput && hInput) {
+              wInput.value = dims.w;
+              hInput.value = dims.h;
+              resizerLockChk.checked = true;
+            }
+          });
+        }
+
+        // Attach listeners to newly added rows
+        const origAddObserver = new MutationObserver((mutations) => {
+          mutations.forEach((m) => {
+            m.addedNodes.forEach((node) => {
+              if (node.classList && node.classList.contains('dimension-row-fastapi')) {
+                attachResizerRowListeners(node);
+              }
+            });
+          });
+        });
+        origAddObserver.observe(containerFastAPI, { childList: true });
+      }
     });
   </script>
 {% endblock %}
+

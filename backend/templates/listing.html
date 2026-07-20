@@ -39,21 +39,14 @@
           </label>
         </div>
 
-        <div style="flex: 1; min-width: 200px;">
-          <label style="margin: 0;">
-            <span>Target (DPI/Dimension Check)</span>
-            <select name="targets" style="padding: 9px 12px; border-radius: 8px;">
-              {% for prod in products %}
-                <option value="{{ prod.key }}" {% if prod.key in selected_targets %}selected{% endif %}>{{ prod.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-        </div>
-
         <div style="flex: 2; min-width: 300px;">
           <label style="margin: 0;">
-            <span>SEO Target Keywords / Niche (optional)</span>
-            <input type="text" name="seo_keywords" value="{{ seo_keywords or '' }}" placeholder="e.g. retro cottagecore halloween cat" style="padding: 8px 12px; border-radius: 8px;" />
+            <span>Target (DPI/Dimension Check)</span>
+            <select name="targets" style="padding: 9px 12px; border-radius: 8px; width: 100%;">
+              {% for prod in products %}
+                <option value="{{ prod.key }}" {% if prod.key in selected_targets %}selected{% endif %}>{{ prod.name }}{% if prod.width and prod.height %} — {{ prod.width }}×{{ prod.height }}{% if prod.dpi %}, {{ prod.dpi }} DPI{% endif %}{% endif %}</option>
+              {% endfor %}
+            </select>
           </label>
         </div>
       </div>
@@ -80,7 +73,6 @@
           <input type="hidden" name="targets" value="{{ target }}" />
         {% endfor %}
         <input type="hidden" name="image_id" value="{{ image_id }}" />
-        <input type="hidden" name="seo_keywords" value="{{ seo_keywords or '' }}" />
         {% if analysis.is_ready %}
           <button type="submit" class="primary-btn" data-loading-msg="AI is drafting SEO keywords & listing copy...">Generate listing copy</button>
         {% else %}

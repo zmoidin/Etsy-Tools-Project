@@ -91,7 +91,16 @@ def create_app() -> FastAPI:
         image_url = f"/runtime/uploads/{image_id}" if image_id else None
         active_step = 2 if listing else 1
         
-        products_options = [{"key": key, "name": value.get("name", key)} for key, value in products.items()]
+        products_options = [
+            {
+                "key": key,
+                "name": value.get("name", key),
+                "width": value.get("width"),
+                "height": value.get("height"),
+                "dpi": value.get("dpi"),
+            }
+            for key, value in products.items()
+        ]
         formats_options = [{"key": key, "name": value} for key, value in digital_formats.items()]
         
         return templates.TemplateResponse(
@@ -208,19 +217,17 @@ def create_app() -> FastAPI:
         request: Request,
         digital_format: str = Form(...),
         targets: list[str] = Form(None),
-        seo_keywords: str = Form(None),
         artwork: UploadFile = File(...),
     ):
         target_list = targets or []
-        kw_str = seo_keywords.strip() if seo_keywords else ""
         if not artwork.filename or not artwork.filename.lower().endswith(".png"):
-            return render_listing(request, selected_format=digital_format, selected_targets=target_list, seo_keywords=kw_str, error="Please upload a PNG artwork file.")
+            return render_listing(request, selected_format=digital_format, selected_targets=target_list, error="Please upload a PNG artwork file.")
 
         image_id = f"{uuid4().hex}.png"
         destination = UPLOAD_DIR / image_id
         data = await artwork.read()
         if not data:
-            return render_listing(request, selected_format=digital_format, selected_targets=target_list, seo_keywords=kw_str, error="The uploaded file was empty.")
+            return render_listing(request, selected_format=digital_format, selected_targets=target_list, error="The uploaded file was empty.")
         destination.write_bytes(data)
 
         analysis = analyzer.analyze_artwork(str(destination), target_list)
@@ -228,7 +235,6 @@ def create_app() -> FastAPI:
             request,
             selected_format=digital_format,
             selected_targets=target_list,
-            seo_keywords=kw_str,
             image_id=image_id,
             analysis=analysis,
         )
@@ -238,19 +244,16 @@ def create_app() -> FastAPI:
         request: Request,
         digital_format: str = Form(...),
         targets: list[str] = Form(None),
-        seo_keywords: str = Form(None),
         image_id: str = Form(...),
     ):
         products, digital_formats = get_config()
         target_list = targets or []
-        kw_str = seo_keywords.strip() if seo_keywords else ""
         image_path = get_upload_path(image_id)
         if image_path is None:
             return render_listing(
                 request,
                 selected_format=digital_format,
                 selected_targets=target_list,
-                seo_keywords=kw_str,
                 error="Uploaded image could not be found. Please upload it again.",
             )
 
@@ -260,40 +263,14 @@ def create_app() -> FastAPI:
                 request,
                 selected_format=digital_format,
                 selected_targets=target_list,
-                seo_keywords=kw_str,
                 image_id=image_id,
                 analysis=analysis,
                 error="Listing copy generation is disabled because the artwork failed diagnostics checks.",
             )
 
-        # Retrieve competitor listings context from Tavily
-        competitor_context = ""
-        if kw_str and settings.tavily_api_key and settings.tavily_api_key != "your_tavily_api_key_here":
-            try:
-                print(f"Crawling live competitor listings on Etsy for keywords: '{kw_str}'...")
-                tavily_response = requests.post(
-                    "https://api.tavily.com/search",
-                    json={
-                        "api_key": settings.tavily_api_key,
-                        "query": f"site:etsy.com digital download png {kw_str}",
-                        "search_depth": "basic",
-                        "max_results": 5,
-                    },
-                    timeout=10,
-                )
-                if tavily_response.status_code == 200:
-                    search_data = tavily_response.json()
-                    increment_tavily_usage()
-                    results = search_data.get("results", [])
-                    if results:
-                        competitor_context = "\n\n".join([f"Competitor Listing title: {r.get('title')}\nDescription snippet: {r.get('content')}" for r in results])
-                        print(f"Successfully retrieved {len(results)} competitor listings for copywriting injection.")
-            except Exception as e:
-                print(f"Failed to crawl competitor listings: {e}")
-
         format_name = digital_formats.get(digital_format, digital_format)
         target_names = [products[k]["name"] for k in target_list if k in products]
-        
+
         product_context = format_name
         if target_names:
             product_context += f" (targeted physical applications: {', '.join(target_names)})"
@@ -302,13 +279,12 @@ def create_app() -> FastAPI:
             str(image_path),
             api_key=settings.gemini_api_key,
             product_type=product_context,
-            competitor_context=competitor_context,
+            competitor_context="",
         )
         return render_listing(
             request,
             selected_format=digital_format,
             selected_targets=target_list,
-            seo_keywords=kw_str,
             image_id=image_id,
             analysis=analysis,
             listing=listing,

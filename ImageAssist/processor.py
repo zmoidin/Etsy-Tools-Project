@@ -112,35 +112,77 @@ def remove_connected_background_color(img_pil, tolerance=30):
     return Image.fromarray(np_img)
 
 def fastsam_remove_background(filepath):
-    model = YOLO(str(find_model_file("FastSAM-s.pt")))
-    results = model(filepath, retina_masks=True, conf=0.4)
-    result = results[0]
-    
+    """
+    Two-stage background removal:
+      Stage 1 (primary): Corner flood-fill on the original image — reliable for
+                         solid/plain backgrounds regardless of subject shape.
+      Stage 2 (refiner): FastSAM segmentation mask applied only as a soft trim
+                         on pixels that stage 1 already left semi-transparent,
+                         so FastSAM can never destroy subject pixels.
+    Falls back to the original image if either stage produces a fully transparent result.
+    """
+    basename = os.path.basename(filepath)
     img_pil = Image.open(filepath).convert("RGBA")
-    
-    if result.masks is None:
+    orig_arr = np.array(img_pil)
+    print(f"[BgRemoval] {basename}: loaded {img_pil.size}, mode RGBA")
+
+    # ── Stage 1: corner flood-fill ────────────────────────────────────────────
+    stage1 = remove_connected_background_color(img_pil, tolerance=30)
+    stage1_arr = np.array(stage1)
+    opaque_after_stage1 = int((stage1_arr[:, :, 3] > 0).sum())
+    total_px = stage1_arr.shape[0] * stage1_arr.shape[1]
+    print(f"[BgRemoval] {basename}: after flood-fill {opaque_after_stage1}/{total_px} opaque pixels "
+          f"({100*opaque_after_stage1/total_px:.1f}%)")
+
+    if opaque_after_stage1 == 0:
+        print(f"[BgRemoval] {basename}: flood-fill wiped everything — falling back to original.")
         return img_pil
-        
-    np_img = np.array(img_pil)
-    masks = result.masks.data.cpu().numpy()
-    
-    # Combine all masks found to extract the full object
-    combined_mask = np.zeros(np_img.shape[:2], dtype=np.float32)
-    for mask in masks:
-        if mask.shape != np_img.shape[:2]:
-            mask = cv2.resize(mask, (np_img.shape[1], np_img.shape[0]), interpolation=cv2.INTER_LINEAR)
-        combined_mask = np.maximum(combined_mask, mask)
-        
-    mask_uint8 = (combined_mask * 255).astype(np.uint8)
-    kernel = np.ones((3, 3), np.uint8)
-    mask_uint8 = cv2.dilate(mask_uint8, kernel, iterations=1)
-    item_alpha = cv2.GaussianBlur(mask_uint8, (3, 3), 0)
-    
-    item_rgba = np_img.copy()
-    item_rgba[:, :, 3] = np.minimum(item_rgba[:, :, 3], item_alpha)
-    
-    res_img = Image.fromarray(item_rgba)
-    return remove_connected_background_color(res_img, tolerance=30)
+
+    # ── Stage 2: FastSAM refinement (optional, non-destructive) ──────────────
+    try:
+        model = YOLO(str(find_model_file("FastSAM-s.pt")))
+        results = model(filepath, retina_masks=True, conf=0.4)
+        result = results[0]
+
+        if result.masks is not None:
+            masks = result.masks.data.cpu().numpy()
+            combined_mask = np.zeros(orig_arr.shape[:2], dtype=np.float32)
+            for mask in masks:
+                if mask.shape != orig_arr.shape[:2]:
+                    mask = cv2.resize(mask, (orig_arr.shape[1], orig_arr.shape[0]),
+                                      interpolation=cv2.INTER_LINEAR)
+                combined_mask = np.maximum(combined_mask, mask)
+
+            mask_uint8 = (combined_mask * 255).astype(np.uint8)
+            kernel = np.ones((3, 3), np.uint8)
+            mask_uint8 = cv2.dilate(mask_uint8, kernel, iterations=1)
+            fastsam_alpha = cv2.GaussianBlur(mask_uint8, (3, 3), 0)
+
+            fastsam_coverage = int((fastsam_alpha > 127).sum())
+            print(f"[BgRemoval] {basename}: FastSAM mask covers "
+                  f"{100*fastsam_coverage/total_px:.1f}% of pixels")
+
+            # Non-destructive merge: only REDUCE alpha where FastSAM is confident
+            # the pixel is background (fastsam_alpha < 30).  Never zero out pixels
+            # that stage-1 kept, unless FastSAM is very sure they are background.
+            refined_arr = stage1_arr.copy()
+            background_by_fastsam = fastsam_alpha < 30  # FastSAM says "not subject"
+            refined_arr[background_by_fastsam, 3] = 0
+
+            opaque_after_stage2 = int((refined_arr[:, :, 3] > 0).sum())
+            print(f"[BgRemoval] {basename}: after FastSAM refine {opaque_after_stage2}/{total_px} opaque pixels "
+                  f"({100*opaque_after_stage2/total_px:.1f}%)")
+
+            if opaque_after_stage2 == 0:
+                print(f"[BgRemoval] {basename}: FastSAM refine wiped everything — keeping stage-1 result.")
+            else:
+                return Image.fromarray(refined_arr)
+        else:
+            print(f"[BgRemoval] {basename}: FastSAM found no masks — using stage-1 result only.")
+    except Exception as e:
+        print(f"[BgRemoval] {basename}: FastSAM stage failed ({e}) — using stage-1 result only.")
+
+    return stage1
 
 def remove_background(input_dir):
     output_dir = os.path.join(input_dir, "Results")
@@ -173,17 +215,24 @@ def format_clipart_batch(input_dir, target_width=3000, target_height=3000, targe
             shutil.rmtree(output_dir, ignore_errors=True)
             raise RuntimeError("Batch formatting cancelled by user.")
         try:
-            print(f"Formatting {os.path.basename(filepath)}...")
-            
+            print(f"[Batch] Formatting {os.path.basename(filepath)}...")
+
             if remove_bg:
                 img_nobg = fastsam_remove_background(filepath)
                 bbox = img_nobg.getbbox()
+                print(f"[Batch]   bbox after bg removal: {bbox}")
                 if bbox:
                     img_nobg = img_nobg.crop(bbox)
+                else:
+                    # bbox is None means fully transparent — fastsam fallback should
+                    # prevent this, but guard here just in case.
+                    print(f"[Batch]   WARNING: bbox is None after bg removal, using original.")
+                    img_nobg = Image.open(filepath).convert("RGBA")
             else:
                 img_nobg = Image.open(filepath).convert("RGBA")
-            
+
             width, height = img_nobg.size
+            print(f"[Batch]   image size after crop: {width}x{height}")
             
             # Setup RealESRGAN if image needs upscaling to prevent blurriness and use_upscaler is enabled
             realesrgan_exe = None
@@ -198,12 +247,23 @@ def format_clipart_batch(input_dir, target_width=3000, target_height=3000, targe
                 from uuid import uuid4
                 temp_in = os.path.join(output_dir, f"temp_{uuid4().hex}_in.png")
                 temp_out = os.path.join(output_dir, f"temp_{uuid4().hex}_out.png")
-                img_nobg.save(temp_in, "PNG")
+
+                # RealESRGAN flattens alpha to black, so composite onto white
+                # before passing in, then restore transparency afterwards.
+                alpha_channel = img_nobg.split()[3]  # save original alpha
+                white_bg = Image.new("RGB", img_nobg.size, (255, 255, 255))
+                white_bg.paste(img_nobg, mask=alpha_channel)
+                white_bg.save(temp_in, "PNG")
+
                 try:
-                    # Using x4plus-anime for clean lines and faster processing speeds
                     subprocess.run([realesrgan_exe, '-i', temp_in, '-o', temp_out, '-n', 'realesrgan-x4plus-anime', '-s', '4'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     if os.path.exists(temp_out):
-                        img_nobg = Image.open(temp_out).convert("RGBA")
+                        upscaled_rgb = Image.open(temp_out).convert("RGB")
+                        # Scale the saved alpha mask to match the upscaled dimensions
+                        upscaled_alpha = alpha_channel.resize(upscaled_rgb.size, Image.Resampling.LANCZOS)
+                        upscaled_rgba = upscaled_rgb.convert("RGBA")
+                        upscaled_rgba.putalpha(upscaled_alpha)
+                        img_nobg = upscaled_rgba
                         width, height = img_nobg.size
                 except Exception as e:
                     print(f"Real-ESRGAN upscale failed for batch item: {e}")
@@ -232,8 +292,15 @@ def format_clipart_batch(input_dir, target_width=3000, target_height=3000, targe
             
             base_name = os.path.splitext(os.path.basename(filepath))[0]
             out_path = os.path.join(output_dir, f"{base_name}_clipart.png")
+            final_arr = np.array(output_image)
+            opaque_final = int((final_arr[:, :, 3] > 0).sum())
+            total_final = final_arr.shape[0] * final_arr.shape[1]
+            print(f"[Batch]   final canvas opaque pixels: {opaque_final}/{total_final} "
+                  f"({100*opaque_final/total_final:.1f}%)")
+            if opaque_final == 0:
+                print(f"[Batch]   WARNING: output is fully transparent — saving anyway.")
             output_image.save(out_path, "PNG", dpi=(target_dpi, target_dpi))
-            print(f"Saved formatted clipart: {out_path}")
+            print(f"[Batch] Saved: {out_path}")
             
         except Exception as e:
             print(f"Failed processing {filepath}: {e}")
