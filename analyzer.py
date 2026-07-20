@@ -12,7 +12,9 @@ def analyze_artwork(image_path, target_product_keys=None):
     - Dimensions (pixels)
     - DPI (Dots Per Inch)
     - Match against configurations in config.yaml
-    
+      
+      
+      
     """
     config = load_config()
     products = config.get('products', {})
