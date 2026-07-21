@@ -16,6 +16,64 @@ def ensure_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
+def ai_upscale(img_pil, model='realesrgan-x4plus', output_dir=None):
+    """
+    Shared RealESRGAN upscaling helper.
+    Runs the portable ncnn-vulkan binary on img_pil (a PIL RGBA image) and
+    returns the 4x upscaled PIL RGBA image.  If RealESRGAN is unavailable or
+    fails, the original image is returned unchanged so callers can still
+    fall back to LANCZOS for the final resize.
+
+    Alpha handling: composites the image onto white before passing to the
+    binary (which doesn't support transparency), then restores the original
+    alpha mask scaled to the new dimensions.
+    """
+    import subprocess, tempfile
+    from uuid import uuid4
+
+    try:
+        exe = init_realesrgan()
+    except Exception as e:
+        print(f"[RealESRGAN] Engine init failed: {e}. Falling back to LANCZOS.")
+        return img_pil
+
+    img_rgba = img_pil.convert('RGBA')
+    alpha_channel = img_rgba.split()[3]
+
+    # Composite onto white — the binary can't handle transparency
+    white_bg = Image.new('RGB', img_rgba.size, (255, 255, 255))
+    white_bg.paste(img_rgba, mask=alpha_channel)
+
+    work_dir = output_dir or tempfile.gettempdir()
+    uid = uuid4().hex
+    temp_in  = os.path.join(work_dir, f'_resr_in_{uid}.png')
+    temp_out = os.path.join(work_dir, f'_resr_out_{uid}.png')
+
+    try:
+        white_bg.save(temp_in, 'PNG')
+        subprocess.run(
+            [exe, '-i', temp_in, '-o', temp_out, '-n', model, '-s', '4'],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if not os.path.exists(temp_out):
+            raise FileNotFoundError('RealESRGAN produced no output file.')
+
+        upscaled_rgb = Image.open(temp_out).convert('RGB')
+        # Restore alpha scaled to the new (4x) dimensions
+        upscaled_alpha = alpha_channel.resize(upscaled_rgb.size, Image.Resampling.LANCZOS)
+        result = upscaled_rgb.convert('RGBA')
+        result.putalpha(upscaled_alpha)
+        print(f"[RealESRGAN] Upscaled {img_pil.size} → {result.size} using {model}")
+        return result
+    except Exception as e:
+        print(f"[RealESRGAN] Upscale failed: {e}. Falling back to LANCZOS.")
+        return img_pil
+    finally:
+        for f in (temp_in, temp_out):
+            if os.path.exists(f):
+                try: os.remove(f)
+                except Exception: pass
+
 def split_image(input_path, output_dir, grid):
     rows, cols = map(int, grid.split('x'))
     img = Image.open(input_path)
@@ -51,16 +109,21 @@ def resize_images(input_dir, output_dir, scale):
     for filepath in glob.glob(pattern):
         if not os.path.isfile(filepath): continue
         try:
-            img = Image.open(filepath)
+            img = Image.open(filepath).convert('RGBA')
             new_width = int(img.width * scale)
             new_height = int(img.height * scale)
+
+            # Use AI upscaling when growing the image
+            if scale > 1.0:
+                img = ai_upscale(img, output_dir=output_dir)
+
             resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
             
             out_path = os.path.join(output_dir, os.path.basename(filepath))
             resized.save(out_path)
             print(f"Resized and saved: {out_path}")
         except Exception as e:
-            pass
+            print(f"resize_images failed for {filepath}: {e}")
 
 def crop_images(input_dir, output_dir, target_width, target_height):
     ensure_dir(output_dir)
@@ -234,42 +297,10 @@ def format_clipart_batch(input_dir, target_width=3000, target_height=3000, targe
             width, height = img_nobg.size
             print(f"[Batch]   image size after crop: {width}x{height}")
             
-            # Setup RealESRGAN if image needs upscaling to prevent blurriness and use_upscaler is enabled
-            realesrgan_exe = None
+            # Use AI upscaling when the target canvas is larger than the source
             if use_upscaler and (target_width > width or target_height > height):
-                try:
-                    realesrgan_exe = init_realesrgan()
-                except Exception:
-                    pass
-            
-            if realesrgan_exe is not None:
-                import subprocess
-                from uuid import uuid4
-                temp_in = os.path.join(output_dir, f"temp_{uuid4().hex}_in.png")
-                temp_out = os.path.join(output_dir, f"temp_{uuid4().hex}_out.png")
-
-                # RealESRGAN flattens alpha to black, so composite onto white
-                # before passing in, then restore transparency afterwards.
-                alpha_channel = img_nobg.split()[3]  # save original alpha
-                white_bg = Image.new("RGB", img_nobg.size, (255, 255, 255))
-                white_bg.paste(img_nobg, mask=alpha_channel)
-                white_bg.save(temp_in, "PNG")
-
-                try:
-                    subprocess.run([realesrgan_exe, '-i', temp_in, '-o', temp_out, '-n', 'realesrgan-x4plus-anime', '-s', '4'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    if os.path.exists(temp_out):
-                        upscaled_rgb = Image.open(temp_out).convert("RGB")
-                        # Scale the saved alpha mask to match the upscaled dimensions
-                        upscaled_alpha = alpha_channel.resize(upscaled_rgb.size, Image.Resampling.LANCZOS)
-                        upscaled_rgba = upscaled_rgb.convert("RGBA")
-                        upscaled_rgba.putalpha(upscaled_alpha)
-                        img_nobg = upscaled_rgba
-                        width, height = img_nobg.size
-                except Exception as e:
-                    print(f"Real-ESRGAN upscale failed for batch item: {e}")
-                finally:
-                    if os.path.exists(temp_in): os.remove(temp_in)
-                    if os.path.exists(temp_out): os.remove(temp_out)
+                img_nobg = ai_upscale(img_nobg, model='realesrgan-x4plus-anime', output_dir=output_dir)
+                width, height = img_nobg.size
             
             if remove_bg:
                 # Scale to fit inside target size (leaving 5% margins for clipart)
@@ -615,35 +646,13 @@ def upscale_and_resize_general_image(input_path, target_width, target_height, ta
     print(f"Upscaling general image {os.path.basename(input_path)} to {target_width}x{target_height} at {target_dpi} DPI...")
     
     img = Image.open(input_path).convert("RGBA")
-    
-    # Try initializing RealESRGAN
-    realesrgan_exe = None
-    try:
-        realesrgan_exe = init_realesrgan()
-    except Exception as e:
-        print(f"Could not setup RealESRGAN engine: {e}. Will fallback to basic resizing.")
-        
-    if realesrgan_exe is not None:
-        import subprocess
-        output_dir = os.path.dirname(output_path)
-        temp_in = os.path.join(output_dir, "temp_upscale_in.png")
-        temp_out = os.path.join(output_dir, "temp_upscale_out.png")
-        img.save(temp_in, "PNG")
-        try:
-            subprocess.run([realesrgan_exe, '-i', temp_in, '-o', temp_out, '-n', 'realesrgan-x4plus', '-s', '4'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if os.path.exists(temp_out):
-                img = Image.open(temp_out).convert("RGBA")
-                os.remove(temp_out)
-            if os.path.exists(temp_in):
-                os.remove(temp_in)
-        except Exception as e:
-            print(f"AI Upscale failed: {e}. Falling back to basic resizing.")
-            if os.path.exists(temp_in):
-                os.remove(temp_in)
-            if os.path.exists(temp_out):
-                os.remove(temp_out)
+    output_dir = os.path.dirname(output_path)
+
+    # AI upscale first if growing the image
+    if target_width > img.width or target_height > img.height:
+        img = ai_upscale(img, model='realesrgan-x4plus', output_dir=output_dir)
                 
-    # Resize to exact target size
+    # Final resize to exact target dimensions (LANCZOS after AI 4x pass)
     img_resized = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
     
     # Save with custom DPI settings
@@ -658,7 +667,7 @@ def resize_image_multiple_sizes(input_path, sizes, output_zip_path):
     """
     import zipfile
     
-    img = Image.open(input_path)
+    img = Image.open(input_path).convert("RGBA")
     
     base_dir = os.path.dirname(output_zip_path)
     temp_files = []
@@ -666,25 +675,35 @@ def resize_image_multiple_sizes(input_path, sizes, output_zip_path):
     base_name = os.path.splitext(os.path.basename(input_path))[0]
     
     try:
-        # Generate each resized version
+        # AI upscale the source once if any target is larger than the original.
+        # We upscale the master copy once, then fit each requested size from it.
+        max_target_w = max(w for w, h in sizes)
+        max_target_h = max(h for w, h in sizes)
+        src = img  # img already RGBA from above
+        if max_target_w > src.width or max_target_h > src.height:
+            src = ai_upscale(src, model='realesrgan-x4plus', output_dir=base_dir)
+
+        # Generate each resized version from the (possibly AI-upscaled) master
         for width, height in sizes:
-            # High-quality resize using LANCZOS
-            # To handle transparency correctly, keep mode as RGBA (or convert if needed)
-            if img.mode != 'RGBA':
-                resized_img = img.convert('RGBA')
-            else:
-                resized_img = img
-                
-            resized_img = resized_img.resize((width, height), Image.Resampling.LANCZOS)
+            # Fit-with-padding: scale to fit inside target, preserve aspect ratio
+            canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            scale = min(width / src.width, height / src.height)
+            new_size = (int(src.width * scale), int(src.height * scale))
+            resized_img = src.resize(new_size, Image.Resampling.LANCZOS)
+
+            # Center on the canvas
+            paste_x = (width - new_size[0]) // 2
+            paste_y = (height - new_size[1]) // 2
+            canvas.paste(resized_img, (paste_x, paste_y))
             
             # Save the resized image
             out_filename = f"{base_name}_{width}x{height}.png"
             out_path = os.path.join(base_dir, out_filename)
             
             # Save with 300 DPI by default to preserve print-ready resolution
-            resized_img.save(out_path, "PNG", dpi=(300, 300))
+            canvas.save(out_path, "PNG", dpi=(300, 300))
             temp_files.append((out_path, out_filename))
-            print(f"Resized image to {width}x{height} and saved to {out_path}")
+            print(f"Resized image to {width}x{height} (AI-upscaled, fitted) and saved to {out_path}")
             
         # Create ZIP file
         with zipfile.ZipFile(output_zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:

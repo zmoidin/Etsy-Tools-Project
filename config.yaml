@@ -68,6 +68,12 @@ products:
     height: 3600
     dpi: 300
     description: "Master tattoo design (2400x3600 px at 300 DPI)"
+  journal_cover:
+    name: "Journal Cover"
+    width: 3742
+    height: 2625
+    dpi: 300
+    description: "Journal / notebook cover print area (3742x2625 px at 300 DPI, landscape)"
 
 digital_formats:
   sublimation_png: "Single PNG Sublimation Design"
@@ -138,3 +144,7 @@ mockup_overlay_defaults:
     center_x: 0.50
     center_y: 0.50
     width_fraction: 0.40
+  journal_cover:
+    center_x: 0.50
+    center_y: 0.50
+    width_fraction: 0.55
